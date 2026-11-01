@@ -159,7 +159,7 @@ public sealed partial class MainWindow : Window
     private void ShowFolders(System.Collections.Generic.IEnumerable<MailFolderInfo> folders)
     {
         FolderList.Children.Clear(); folderButtons.Clear();
-        foreach (var entry in folders)
+        foreach (var entry in System.Linq.Enumerable.OrderBy(folders, f => f.Name == "收件箱" ? 0 : 1))
         {
             var button = new Button { Content = entry.Name, IsEnabled = entry.Selectable, Margin = new Thickness(Math.Min(entry.Depth, 5) * 12, 0, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch, Style = (Style)((FrameworkElement)Content).Resources["SidebarButtonStyle"] };
             button.Click += async (_, _) => await OpenFolderAsync(entry.Path);
@@ -395,11 +395,11 @@ public sealed partial class MainWindow : Window
                     var body = await mail.GetSearchBodyAsync(item, cancellation.Token);
                     bool matches = false;
                     const int chunkSize = 2400, overlap = 240;
-                    for (int start = 0; start < body.Length;)
+                    for (int start = 0; ;)
                     {
                         int end = Math.Min(start + chunkSize, body.Length);
                         if (end < body.Length && char.IsHighSurrogate(body[end - 1]) && char.IsLowSurrogate(body[end])) end--;
-                        if (await decision.MatchesAsync(settings, body[start..end], query, cancellation.Token)) { matches = true; break; }
+                        if (await decision.MatchesAsync(settings, item, body[start..end], query, cancellation.Token)) { matches = true; break; }
                         if (end == body.Length) break;
                         start = end - overlap;
                         if (start > 0 && char.IsLowSurrogate(body[start]) && char.IsHighSurrogate(body[start - 1])) start--;
@@ -418,7 +418,7 @@ public sealed partial class MainWindow : Window
                 completed++;
                 if (ReferenceEquals(searchCancellation, cancellation)) AiSearchStatus.Text = $"AI 搜索中 · 本地缓存 {completed}/{items.Count} · 匹配 {aiResults.Count}" + (failed > 0 ? $" · 失败 {failed}" : "");
             }
-            if (ReferenceEquals(searchCancellation, cancellation)) AiSearchStatus.Text = $"AI 搜索完成 · 本地邮件索引 {completed}/{items.Count} · 匹配 {aiResults.Count}" + (failed > 0 ? $" · 正文获取或判断失败 {failed}" : "") + "（按正文判断）";
+            if (ReferenceEquals(searchCancellation, cancellation)) AiSearchStatus.Text = $"AI 搜索完成 · 本地邮件索引 {completed}/{items.Count} · 匹配 {aiResults.Count}" + (failed > 0 ? $" · 正文获取或判断失败 {failed}" : "") + "（按邮件内容判断）";
         }
         catch (OperationCanceledException) { if (!closing && ReferenceEquals(searchCancellation, cancellation)) AiSearchStatus.Text = $"AI 搜索已中止 · 匹配 {aiResults.Count}（本地缓存）"; }
         catch (Exception ex) { if (!closing && ReferenceEquals(searchCancellation, cancellation)) AiSearchStatus.Text = "AI 搜索失败：" + ex.Message; }

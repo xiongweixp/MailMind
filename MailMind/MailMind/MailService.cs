@@ -147,7 +147,8 @@ public sealed class MailService
             }
         }
         var inbox = client.Inbox;
-        if (!result.ContainsKey(inbox.FullName)) result[inbox.FullName] = new(inbox.FullName, "收件箱", 0, true);
+        if (result.TryGetValue(inbox.FullName, out var inboxInfo)) result[inbox.FullName] = inboxInfo with { Name = "收件箱" };
+        else result[inbox.FullName] = new(inbox.FullName, "收件箱", 0, true);
         var folders = result.Values.OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase).ToList();
         cache.SaveFolders(account!.Address, folders);
         return folders;
