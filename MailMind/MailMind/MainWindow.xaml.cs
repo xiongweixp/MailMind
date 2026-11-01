@@ -2,16 +2,46 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Input;
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 
 namespace MailMind;
 
 public sealed partial class MainWindow : Window
 {
     private readonly MailService mail = new();
+    private readonly DecisionService decision = new();
+    private readonly System.Threading.SemaphoreSlim decisionQueue = new(1, 1);
+    private readonly System.Threading.CancellationTokenSource windowLifetime = new();
+    private System.Threading.CancellationTokenSource? searchCancellation;
+    private readonly System.Collections.Generic.List<MailItem> aiResults = new();
+    private bool aiSearchShowing;
+    private bool closing;
+    private static readonly string LayoutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailMind", "layout.json");
+    private double expandedAiWidth = 320, dragStartX, dragFirstWidth, dragSecondWidth;
+    private int activeSplitter = -1;
+    private uint dragPointerId;
+    private record ColumnWidths(double Sidebar, double Mail, double Ai);
+    private delegate nint WindowSubclassProc(nint hwnd, uint message, nuint wParam, nint lParam, nuint subclassId, nuint referenceData);
+    private WindowSubclassProc? windowSubclass;
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MinMaxInfo { public NativePoint Reserved, MaxSize, MaxPosition, MinTrackSize, MaxTrackSize; }
+    [DllImport("comctl32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowSubclass(nint hwnd, WindowSubclassProc callback, nuint id, nuint data);
+    [DllImport("comctl32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RemoveWindowSubclass(nint hwnd, WindowSubclassProc callback, nuint id);
+    [DllImport("comctl32.dll")]
+    private static extern nint DefSubclassProc(nint hwnd, uint message, nuint wParam, nint lParam);
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(nint hwnd);
     private readonly ObservableCollection<MailItem> messages = new();
     private readonly ObservableCollection<MailDateGroup> dateGroups = new();
     private readonly CollectionViewSource groupedMessages = new() { IsSourceGrouped = true };
@@ -27,12 +57,16 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        LoadColumnWidths();
+        windowSubclass = WindowMessage;
+        if (!SetWindowSubclass(WinRT.Interop.WindowNative.GetWindowHandle(this), windowSubclass, 1, 0))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        AppWindow.Closing += (_, _) => { closing = true; searchCancellation?.Cancel(); windowLifetime.Cancel(); };
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragRegion);
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
-        AppWindow.TitleBar.ButtonForegroundColor = Microsoft.UI.Colors.Black;
-        AppWindow.TitleBar.ButtonInactiveForegroundColor = Microsoft.UI.Colors.Gray;
+        ((FrameworkElement)Content).ActualThemeChanged += (_, _) => UpdateThemeColors();
         AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "MailMind.ico"));
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 900));
         groupedMessages.Source = dateGroups;
@@ -41,12 +75,55 @@ public sealed partial class MainWindow : Window
         {
             if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && e.NewItems != null)
             {
-                foreach (MailItem item in e.NewItems) if (MatchesSearch(item)) AddToDateGroup(item);
+                foreach (MailItem item in e.NewItems) { if (!aiSearchShowing && MatchesSearch(item)) AddToDateGroup(item); _ = ClassifyAsync(item); }
             }
             else ApplySearch();
         };
-        try { mail.Load(); if (mail.Account != null) { ShowAccount(mail.Account.Address); _ = LoadFoldersAsync(); } }
+        UpdateThemeColors();
+        try { decision.Load(); mail.Load(); if (mail.Account != null) { ShowAccount(mail.Account.Address); _ = LoadFoldersAsync(); } }
         catch (Exception ex) { ListStatus.Text = "读取账户失败：" + ex.Message; }
+    }
+    private nint WindowMessage(nint hwnd, uint message, nuint wParam, nint lParam, nuint subclassId, nuint referenceData)
+    {
+        const uint getMinMaxInfo = 0x0024, ncDestroy = 0x0082;
+        if (message == getMinMaxInfo)
+        {
+            var info = Marshal.PtrToStructure<MinMaxInfo>(lParam);
+            double dpi = GetDpiForWindow(hwnd) / 96.0;
+            // The reading pane takes the remaining width, so preserve it alongside the saved fixed columns.
+            double width = SidebarColumn.Width.Value + MailColumn.Width.Value + 220 + expandedAiWidth + 16;
+            info.MinTrackSize.X = Math.Max(info.MinTrackSize.X, (int)Math.Ceiling(width * dpi));
+            Marshal.StructureToPtr(info, lParam, false);
+            return 0;
+        }
+        if (message == ncDestroy && windowSubclass != null) RemoveWindowSubclass(hwnd, windowSubclass, subclassId);
+        return DefSubclassProc(hwnd, message, wParam, lParam);
+    }
+    private async Task ClassifyAsync(MailItem item)
+    {
+        var settings = decision.Settings;
+        var fingerprint = DecisionService.Fingerprint(settings, item);
+        string? cached;
+        try { cached = mail.CachedClassification(item, fingerprint); }
+        catch (Exception ex) { item.Importance = "失败"; if (!closing) ListStatus.Text = "读取 AI 分类缓存失败：" + ex.Message; return; }
+        if (cached != null) { item.Importance = cached; return; }
+        if (!settings.Enabled) { item.Importance = ""; return; }
+        item.Importance = "排队中";
+        try { await decisionQueue.WaitAsync(windowLifetime.Token); }
+        catch (OperationCanceledException) { return; }
+        try
+        {
+            if (!System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) || decision.Settings != settings) return;
+            cached = mail.CachedClassification(item, fingerprint);
+            if (cached != null) { item.Importance = cached; return; }
+            item.Importance = "判断中";
+            var result = await decision.ClassifyAsync(settings, item, windowLifetime.Token);
+            mail.CacheClassification(item, fingerprint, result);
+            if (!closing && System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) && decision.Settings == settings) item.Importance = result;
+        }
+        catch (OperationCanceledException) when (closing) { }
+        catch (Exception ex) { if (!closing && System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item))) { item.Importance = "失败"; ListStatus.Text = "AI 分类失败：" + ex.Message; } }
+        finally { decisionQueue.Release(); }
     }
     private void ShowAccount(string address)
     {
@@ -56,11 +133,28 @@ public sealed partial class MainWindow : Window
     }
     private void UpdateFolderSelection(string name)
     {
+        bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
         foreach (var (path, button) in folderButtons)
         {
-            button.Background = new SolidColorBrush(path == name ? Windows.UI.Color.FromArgb(255, 225, 235, 252) : Microsoft.UI.Colors.Transparent);
-            button.Foreground = new SolidColorBrush(path == name ? Windows.UI.Color.FromArgb(255, 27, 82, 181) : Windows.UI.Color.FromArgb(255, 23, 35, 58));
+            bool selected = path == name;
+            button.Background = new SolidColorBrush(selected ? (dark ? Windows.UI.Color.FromArgb(255, 43, 68, 98) : Windows.UI.Color.FromArgb(255, 225, 235, 252)) : Microsoft.UI.Colors.Transparent);
+            button.Foreground = new SolidColorBrush(selected ? (dark ? Windows.UI.Color.FromArgb(255, 173, 207, 255) : Windows.UI.Color.FromArgb(255, 27, 82, 181)) : (dark ? Windows.UI.Color.FromArgb(255, 242, 243, 245) : Windows.UI.Color.FromArgb(255, 23, 35, 58)));
         }
+    }
+    private void UpdateThemeColors()
+    {
+        bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
+        AppWindow.TitleBar.ButtonForegroundColor = dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
+        AppWindow.TitleBar.ButtonInactiveForegroundColor = dark ? Windows.UI.Color.FromArgb(255, 165, 165, 165) : Microsoft.UI.Colors.Gray;
+        UpdateFolderSelection(folder);
+        UpdateDateFilterColor();
+    }
+    private void UpdateDateFilterColor()
+    {
+        if (DateFilterButton == null) return;
+        if (!searchDate.HasValue) { DateFilterButton.ClearValue(Control.ForegroundProperty); return; }
+        bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
+        DateFilterButton.Foreground = new SolidColorBrush(dark ? Windows.UI.Color.FromArgb(255, 145, 186, 255) : Windows.UI.Color.FromArgb(255, 40, 99, 207));
     }
     private void ShowFolders(System.Collections.Generic.IEnumerable<MailFolderInfo> folders)
     {
@@ -86,6 +180,7 @@ public sealed partial class MainWindow : Window
         {
             if (messages.Count == 0) ListStatus.Text = "正在同步目录…";
             var folders = await mail.GetFoldersAsync();
+            if (closing) return;
             ShowFolders(folders);
             var inbox = System.Linq.Enumerable.FirstOrDefault(folders, f => f.Name == "收件箱" && f.Selectable);
             if (inbox != null && (cached.Count == 0 || folder != inbox.Path)) await OpenFolderAsync(inbox.Path);
@@ -93,12 +188,14 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            ListStatus.Text = cached.Count > 0 ? "目录同步失败，显示本地目录：" + ex.Message : "目录同步失败：" + ex.Message;
+            if (!closing) ListStatus.Text = cached.Count > 0 ? "目录同步失败，显示本地目录：" + ex.Message : "目录同步失败：" + ex.Message;
         }
     }
     private async Task OpenFolderAsync(string name)
     {
         if (loading) return;
+        searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear();
+        AiSearchStatusPanel.Visibility = Visibility.Collapsed;
         loading = true; pageLoadFailed = false; folder = name; UpdateFolderSelection(name); FolderTitle.Text = folderButtons.TryGetValue(name, out var selectedFolder) ? selectedFolder.Content.ToString() : name; messages.Clear(); offset = total = 0;
         ListEmptyText.Visibility = Visibility.Collapsed;
         if (mail.Account == null) { ListStatus.Text = "请先配置邮箱"; loading = false; return; }
@@ -108,11 +205,13 @@ public sealed partial class MainWindow : Window
             int count = Math.Max(15, (int)Math.Ceiling(MailList.ActualHeight / 70) + 2);
             await foreach (var item in mail.GetPageAsync(0, count))
             {
+                if (closing) return;
                 offset++;
                 if (item != null) messages.Add(item);
             }
             ListStatus.Text = messages.Count > 0 ? $"本地缓存：{messages.Count} 封 · 正在同步…" : "正在连接邮箱…";
             int serverTotal = await mail.BeginFolderAsync(name);
+            if (closing) return;
             if (!mail.Offline)
             {
                 messages.Clear(); offset = 0; total = serverTotal;
@@ -125,7 +224,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            ListStatus.Text = "同步失败，显示本地缓存：" + ex.Message;
+            if (!closing) ListStatus.Text = "同步失败，显示本地缓存：" + ex.Message;
             loading = false;
             return;
         }
@@ -135,6 +234,7 @@ public sealed partial class MainWindow : Window
     }
     private async Task LoadPageAsync()
     {
+        if (closing) return;
         if (loading || offset >= total) { if (total == 0 && !loading) { ListEmptyText.Visibility = Visibility.Visible; ListStatus.Text = "没有邮件"; } return; }
         loading = true;
         pageLoadFailed = false;
@@ -145,6 +245,7 @@ public sealed partial class MainWindow : Window
             int count = Math.Max(15, (int)Math.Ceiling(MailList.ActualHeight / 70) + 2);
             await foreach (var item in mail.GetPageAsync(offset, count))
             {
+                if (closing) return;
                 // A missing UID was deleted on the server; still advance past it.
                 offset++;
                 if (item != null) messages.Add(item);
@@ -154,7 +255,7 @@ public sealed partial class MainWindow : Window
             }
             pageLoaded = true;
         }
-        catch (Exception ex) { pageLoadFailed = true; ListStatus.Text = "加载失败：" + ex.Message + "，滚动可重试"; }
+        catch (Exception ex) { pageLoadFailed = true; if (!closing) ListStatus.Text = "加载失败：" + ex.Message + "，滚动可重试"; }
         finally { loading = false; }
         if (pageLoaded) QueuePageCheck();
     }
@@ -165,12 +266,12 @@ public sealed partial class MainWindow : Window
     }
     private void QueuePageCheck(bool retry = false)
     {
-        if (pageCheckQueued || loading || offset >= total || (pageLoadFailed && !retry)) return;
+        if (closing || aiSearchShowing || pageCheckQueued || loading || offset >= total || (pageLoadFailed && !retry)) return;
         pageCheckQueued = true;
         if (!DispatcherQueue.TryEnqueue(async () =>
         {
             pageCheckQueued = false;
-            if (!loading && offset < total && listScroll != null &&
+            if (!closing && !aiSearchShowing && !loading && offset < total && listScroll != null &&
                 listScroll.VerticalOffset >= listScroll.ScrollableHeight - 150)
                 await LoadPageAsync();
         })) pageCheckQueued = false;
@@ -185,13 +286,13 @@ public sealed partial class MainWindow : Window
     }
     private async void MailList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (MailList.SelectedItem is not MailItem item) return;
+        if (closing || MailList.SelectedItem is not MailItem item) return;
         if (ComposeWorkspace.Visibility == Visibility.Visible) { MailList.SelectedItem = null; await ShowNotice("正在写邮件", "请先关闭写信区，再打开邮件。"); return; }
         EmptyWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Visible;
         ReadSubject.Text = item.Subject; ReadSender.Text = item.Sender + "  ·  " + item.Date; ReadBody.Text = "正在加载正文…"; HtmlView.Visibility = Visibility.Collapsed; PlainScroll.Visibility = Visibility.Visible;
         if (item.IsSeen != true) _ = MarkSeenAsync(item);
-        try { var body = await mail.GetBodyAsync(item.Uid); if (ReferenceEquals(MailList.SelectedItem, item)) { if (body.IsHtml) await ShowHtmlAsync(body.Content, item); else ReadBody.Text = body.Content; } }
-        catch (Exception ex) { if (ReferenceEquals(MailList.SelectedItem, item)) ReadBody.Text = "加载正文失败：" + ex.Message; }
+        try { var body = await mail.GetBodyAsync(item.Uid); if (!closing && ReferenceEquals(MailList.SelectedItem, item)) { if (body.IsHtml) await ShowHtmlAsync(body.Content, item); else ReadBody.Text = body.Content; } }
+        catch (Exception ex) { if (!closing && ReferenceEquals(MailList.SelectedItem, item)) ReadBody.Text = "加载正文失败：" + ex.Message; }
     }
     private async Task MarkSeenAsync(MailItem item)
     {
@@ -200,17 +301,18 @@ public sealed partial class MainWindow : Window
         try
         {
             await mail.MarkSeenAsync(item.Uid);
+            if (closing) return;
             item.MarkSeen();
             if (folder == selectedFolder && ReferenceEquals(mail.Account, selectedAccount))
                 foreach (var current in messages)
                     if (current.Uid == item.Uid && !ReferenceEquals(current, item)) current.MarkSeen();
         }
-        catch (Exception ex) { ListStatus.Text = "已读状态同步失败，请重新选择邮件重试：" + ex.Message; }
+        catch (Exception ex) { if (!closing) ListStatus.Text = "已读状态同步失败，请重新选择邮件重试：" + ex.Message; }
     }
     private async Task ShowHtmlAsync(string html, MailItem item)
     {
         await HtmlView.EnsureCoreWebView2Async();
-        if (!ReferenceEquals(MailList.SelectedItem, item)) return;
+        if (closing || !ReferenceEquals(MailList.SelectedItem, item)) return;
         HtmlView.CoreWebView2.Settings.IsScriptEnabled = false;
         HtmlView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
         if (!htmlResourceHandlerReady)
@@ -234,13 +336,107 @@ public sealed partial class MainWindow : Window
         HtmlView.Source = new Uri(documentUri);
         PlainScroll.Visibility = Visibility.Collapsed; HtmlView.Visibility = Visibility.Visible;
     }
-    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => ApplySearch();
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (aiSearchShowing) { searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear(); if (AiSearchStatusPanel != null) AiSearchStatusPanel.Visibility = Visibility.Collapsed; }
+        if (AiSearchButton?.IsChecked == true && AiSearchStatusPanel != null && AiSearchStopButton != null && AiSearchStatus != null)
+        {
+            AiSearchStatusPanel.Visibility = string.IsNullOrWhiteSpace(SearchBox.Text) ? Visibility.Collapsed : Visibility.Visible;
+            AiSearchStopButton.Visibility = Visibility.Collapsed;
+            AiSearchStatus.Text = "按回车开始 AI 搜索（本地缓存）";
+        }
+        ApplySearch();
+    }
+    private async void SearchBox_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter && AiSearchButton.IsChecked == true) { e.Handled = true; await StartAiSearchAsync(); }
+    }
+    private async void AiSearchModeChanged(object sender, RoutedEventArgs e)
+    {
+        if (AiSearchButton == null || SearchBox == null) return;
+        bool enabled = AiSearchButton.IsChecked == true;
+        if (AiSwitchTrack != null) AiSwitchTrack.Background = new SolidColorBrush(enabled ? Windows.UI.Color.FromArgb(255, 40, 99, 207) : Windows.UI.Color.FromArgb(255, 200, 209, 222));
+        if (AiSwitchThumb != null) AiSwitchThumb.Margin = new Thickness(enabled ? 14 : 2, 0, 0, 0);
+        SearchBox.PlaceholderText = enabled ? "输入问题，按回车搜索" : "搜索邮件";
+        if (enabled && !string.IsNullOrWhiteSpace(SearchBox.Text)) await StartAiSearchAsync();
+        else if (!enabled) { searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear(); AiSearchStatusPanel.Visibility = Visibility.Collapsed; ApplySearch(); QueuePageCheck(); }
+    }
+    private void AiSearchStop_Click(object sender, RoutedEventArgs e) => searchCancellation?.Cancel();
+    private void ClearSearch_Click(object sender, RoutedEventArgs e)
+    {
+        searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear();
+        SearchBox.Text = "";
+        SearchCalendar.SelectedDates.Clear(); searchDate = null;
+        AiSearchStatusPanel.Visibility = Visibility.Collapsed;
+        ApplySearch(); QueuePageCheck();
+    }
+    private async Task StartAiSearchAsync()
+    {
+        string query = SearchBox.Text.Trim();
+        if (query.Length == 0) { AiSearchStatusPanel.Visibility = Visibility.Visible; AiSearchStopButton.Visibility = Visibility.Collapsed; AiSearchStatus.Text = "输入搜索问题后按回车。"; return; }
+        searchCancellation?.Cancel();
+        var cancellation = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(windowLifetime.Token);
+        searchCancellation = cancellation;
+        aiSearchShowing = true; aiResults.Clear(); dateGroups.Clear();
+        UpdateClearSearchVisibility();
+        AiSearchStatusPanel.Visibility = Visibility.Visible; AiSearchStopButton.Visibility = Visibility.Visible;
+        ListEmptyText.Visibility = Visibility.Collapsed;
+        var settings = decision.Settings;
+        try
+        {
+            var items = mail.CachedSearchItems(folder);
+            int completed = 0, failed = 0;
+            AiSearchStatus.Text = $"AI 搜索中 · 本地缓存 0/{items.Count} · 匹配 0";
+            foreach (var item in items)
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                try
+                {
+                    var body = await mail.GetSearchBodyAsync(item, cancellation.Token);
+                    bool matches = false;
+                    const int chunkSize = 2400, overlap = 240;
+                    for (int start = 0; start < body.Length;)
+                    {
+                        int end = Math.Min(start + chunkSize, body.Length);
+                        if (end < body.Length && char.IsHighSurrogate(body[end - 1]) && char.IsLowSurrogate(body[end])) end--;
+                        if (await decision.MatchesAsync(settings, body[start..end], query, cancellation.Token)) { matches = true; break; }
+                        if (end == body.Length) break;
+                        start = end - overlap;
+                        if (start > 0 && char.IsLowSurrogate(body[start]) && char.IsHighSurrogate(body[start - 1])) start--;
+                    }
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    if (matches)
+                    {
+                        item.Importance = mail.CachedClassification(item, DecisionService.Fingerprint(settings, item)) ?? "";
+                        aiResults.Add(item);
+                        if (!searchDate.HasValue || (DateTime.TryParse(item.Date, out var date) && date.Date == searchDate.Value)) AddToDateGroup(item);
+                    }
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
+                catch (System.Net.Http.HttpRequestException) { throw; }
+                catch (Exception) { failed++; }
+                completed++;
+                if (ReferenceEquals(searchCancellation, cancellation)) AiSearchStatus.Text = $"AI 搜索中 · 本地缓存 {completed}/{items.Count} · 匹配 {aiResults.Count}" + (failed > 0 ? $" · 失败 {failed}" : "");
+            }
+            if (ReferenceEquals(searchCancellation, cancellation)) AiSearchStatus.Text = $"AI 搜索完成 · 本地邮件索引 {completed}/{items.Count} · 匹配 {aiResults.Count}" + (failed > 0 ? $" · 正文获取或判断失败 {failed}" : "") + "（按正文判断）";
+        }
+        catch (OperationCanceledException) { if (!closing && ReferenceEquals(searchCancellation, cancellation)) AiSearchStatus.Text = $"AI 搜索已中止 · 匹配 {aiResults.Count}（本地缓存）"; }
+        catch (Exception ex) { if (!closing && ReferenceEquals(searchCancellation, cancellation)) AiSearchStatus.Text = "AI 搜索失败：" + ex.Message; }
+        finally { if (!closing && ReferenceEquals(searchCancellation, cancellation)) { searchCancellation = null; AiSearchStopButton.Visibility = Visibility.Collapsed; } cancellation.Dispose(); }
+    }
     private void ApplySearch()
     {
         if (SearchBox == null) return;
+        UpdateClearSearchVisibility();
         dateGroups.Clear();
-        foreach (var item in messages)
-            if (MatchesSearch(item)) AddToDateGroup(item);
+        foreach (var item in aiSearchShowing ? (System.Collections.Generic.IEnumerable<MailItem>)aiResults : messages)
+            if (aiSearchShowing ? !searchDate.HasValue || (DateTime.TryParse(item.Date, out var date) && date.Date == searchDate.Value) : MatchesSearch(item)) AddToDateGroup(item);
+    }
+    private void UpdateClearSearchVisibility()
+    {
+        if (ClearSearchButton == null || SearchBox == null) return;
+        bool filtered = aiSearchShowing || searchDate.HasValue || (AiSearchButton?.IsChecked != true && !string.IsNullOrWhiteSpace(SearchBox.Text));
+        ClearSearchButton.Visibility = filtered ? Visibility.Visible : Visibility.Collapsed;
     }
     private void AddToDateGroup(MailItem item)
     {
@@ -254,7 +450,7 @@ public sealed partial class MainWindow : Window
     }
     private bool MatchesSearch(MailItem item)
     {
-        var query = SearchBox.Text.Trim();
+        var query = AiSearchButton?.IsChecked == true ? "" : SearchBox.Text.Trim();
         var matchesText = query.Length == 0 || item.Subject.Contains(query, StringComparison.CurrentCultureIgnoreCase) || item.Sender.Contains(query, StringComparison.CurrentCultureIgnoreCase) || item.Preview.Contains(query, StringComparison.CurrentCultureIgnoreCase);
         return matchesText && (!searchDate.HasValue || (DateTime.TryParse(item.Date, out var date) && date.Date == searchDate.Value));
     }
@@ -262,7 +458,7 @@ public sealed partial class MainWindow : Window
     {
         searchDate = sender.SelectedDates.Count > 0 ? sender.SelectedDates[0].Date : null;
         ToolTipService.SetToolTip(DateFilterButton, searchDate.HasValue ? $"日期：{searchDate:yyyy-MM-dd}（仅已加载邮件）" : "按日期筛选已加载邮件");
-        DateFilterButton.Foreground = new SolidColorBrush(searchDate.HasValue ? Windows.UI.Color.FromArgb(255, 40, 99, 207) : Windows.UI.Color.FromArgb(255, 23, 35, 58));
+        UpdateDateFilterColor();
         ApplySearch();
     }
     private void ClearDateFilter_Click(object sender, RoutedEventArgs e)
@@ -308,13 +504,21 @@ public sealed partial class MainWindow : Window
             host, port, ssl,
             new TextBlock { Text = "发送邮件 · SMTP", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 0) },
             smtpHost, smtpPort, smtpSsl } };
-        var navigation = new ListView { Width = 160, SelectionMode = ListViewSelectionMode.Single, Items = { "收发服务器" }, SelectedIndex = 0 };
+        var ai = decision.Settings;
+        var engine = new ComboBox { Header = "大模型引擎", HorizontalAlignment = HorizontalAlignment.Stretch, Items = { "LM Studio", "Lemonade Server" }, SelectedIndex = ai.Engine == "Lemonade Server" ? 1 : 0 };
+        var aiPort = new TextBox { Header = "端口", Text = ai.Port.ToString() };
+        engine.SelectionChanged += (_, _) => aiPort.Text = engine.SelectedIndex == 0 ? "1234" : "13305";
+        var model = new TextBox { Header = "Decision 模型", Text = ai.Model, PlaceholderText = "输入模型 ID" };
+        var enabled = new CheckBox { Content = "为加载的邮件自动判断重要性", IsChecked = ai.Enabled };
+        var aiPanel = new StackPanel { Spacing = 10, Children = { new TextBlock { Text = "大模型设备", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, new TextBlock { Text = "连接本机 OpenAI 兼容接口。分类使用发件人、主题和邮件预览。", TextWrapping = TextWrapping.Wrap }, engine, aiPort, model, enabled } };
+        var navigation = new ListView { Width = 160, SelectionMode = ListViewSelectionMode.Single, Items = { "收发服务器", "大模型设备" }, SelectedIndex = 0 };
         var layout = new Grid { Width = 720, MaxWidth = 720, ColumnSpacing = 24 };
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         layout.Children.Add(navigation);
         var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         var save = new Button { Content = "测试并保存" };
+        navigation.SelectionChanged += (_, _) => { scroll.Content = navigation.SelectedIndex == 0 ? panel : aiPanel; save.Content = navigation.SelectedIndex == 0 ? "测试并保存" : "保存"; error.Text = ""; };
         var cancel = new Button { Content = "取消" };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0), Children = { cancel, save } };
         var page = new Grid { Height = 500, RowSpacing = 8 };
@@ -334,6 +538,19 @@ public sealed partial class MainWindow : Window
             save.IsEnabled = false; cancel.IsEnabled = false;
             try
             {
+                if (navigation.SelectedIndex == 1)
+                {
+                    if (!int.TryParse(aiPort.Text, out int aiNumber) || aiNumber < 1 || aiNumber > 65535 || string.IsNullOrWhiteSpace(model.Text)) { error.Text = "请填写有效端口和模型 ID。"; return; }
+                    var settings = new AiSettings(engine.SelectedItem?.ToString() ?? "LM Studio", aiNumber, model.Text.Trim(), enabled.IsChecked == true);
+                    if (settings.Enabled)
+                    {
+                        error.Text = "正在测试模型…";
+                        await decision.ClassifyAsync(settings, new MailItem(0, "test@example.com", "Meeting tomorrow", "", "Please confirm your availability.", true));
+                    }
+                    decision.Save(settings);
+                    foreach (var item in messages) _ = ClassifyAsync(item);
+                    dialog.Hide(); return;
+                }
                 if (string.IsNullOrWhiteSpace(address.Text) || string.IsNullOrWhiteSpace(host.Text) || string.IsNullOrWhiteSpace(secret.Password) || !int.TryParse(port.Text, out int number) || number < 1 || number > 65535) { error.Text = "请填写邮箱、服务器、有效端口和密码或授权码。"; return; }
                 if (!int.TryParse(smtpPort.Text, out int smtpNumber) || smtpNumber < 1 || smtpNumber > 65535) { error.Text = "请输入有效的 SMTP 端口。"; return; }
                 var candidate = new MailAccount(address.Text.Trim(), string.IsNullOrWhiteSpace(user.Text) ? address.Text.Trim() : user.Text.Trim(), host.Text.Trim(), number, ssl.IsChecked != true, smtpHost.Text.Trim(), smtpNumber, smtpSsl.IsChecked != true);
@@ -346,10 +563,75 @@ public sealed partial class MainWindow : Window
         if (saved) await LoadFoldersAsync();
     }
     private async Task ShowNotice(string title, string content) => await new ContentDialog { XamlRoot = ComposeWorkspace.XamlRoot, Title = title, Content = content, CloseButtonText = "知道了" }.ShowAsync();
+    private void LoadColumnWidths()
+    {
+        try
+        {
+            if (!File.Exists(LayoutPath)) return;
+            var widths = System.Text.Json.JsonSerializer.Deserialize<ColumnWidths>(File.ReadAllText(LayoutPath));
+            if (widths == null || !double.IsFinite(widths.Sidebar) || !double.IsFinite(widths.Mail) || !double.IsFinite(widths.Ai)) return;
+            SidebarColumn.Width = new GridLength(Math.Clamp(widths.Sidebar, 160, 600));
+            MailColumn.Width = new GridLength(Math.Clamp(widths.Mail, 250, 800));
+            expandedAiWidth = Math.Clamp(widths.Ai, 220, 800);
+            AiColumn.Width = new GridLength(expandedAiWidth);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+    }
+    private void SaveColumnWidths()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LayoutPath)!);
+            File.WriteAllText(LayoutPath, System.Text.Json.JsonSerializer.Serialize(new ColumnWidths(SidebarColumn.Width.Value, MailColumn.Width.Value, expandedAiWidth)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+    private void Splitter_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement splitter || !e.GetCurrentPoint(splitter).Properties.IsLeftButtonPressed || activeSplitter >= 0) return;
+        if (!int.TryParse(splitter.Tag?.ToString(), out int index) || !splitter.CapturePointer(e.Pointer)) return;
+        activeSplitter = index; dragPointerId = e.Pointer.PointerId;
+        dragStartX = e.GetCurrentPoint(MainColumns).Position.X;
+        dragFirstWidth = index == 0 ? SidebarColumn.ActualWidth : index == 1 ? MailColumn.ActualWidth : AiColumn.ActualWidth;
+        dragSecondWidth = index == 0 ? MailColumn.ActualWidth : ReadingColumn.ActualWidth;
+        e.Handled = true;
+    }
+    private void Splitter_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (activeSplitter < 0 || e.Pointer.PointerId != dragPointerId) return;
+        double delta = e.GetCurrentPoint(MainColumns).Position.X - dragStartX;
+        if (activeSplitter == 0)
+        {
+            double width = Math.Clamp(dragFirstWidth + delta, Math.Max(160, dragFirstWidth + dragSecondWidth - 800), Math.Min(600, Math.Max(160, dragFirstWidth + dragSecondWidth - 250)));
+            SidebarColumn.Width = new GridLength(width);
+            MailColumn.Width = new GridLength(dragFirstWidth + dragSecondWidth - width);
+        }
+        else if (activeSplitter == 1)
+            MailColumn.Width = new GridLength(Math.Clamp(dragFirstWidth + delta, 250, Math.Min(800, Math.Max(250, dragFirstWidth + dragSecondWidth - 220))));
+        else
+        {
+            expandedAiWidth = Math.Clamp(dragFirstWidth - delta, 220, Math.Min(800, Math.Max(220, dragFirstWidth + dragSecondWidth - 220)));
+            AiColumn.Width = new GridLength(expandedAiWidth);
+        }
+        e.Handled = true;
+    }
+    private void Splitter_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (activeSplitter < 0 || e.Pointer.PointerId != dragPointerId) return;
+        activeSplitter = -1;
+        (sender as UIElement)?.ReleasePointerCapture(e.Pointer);
+        SaveColumnWidths(); e.Handled = true;
+    }
+    private void Splitter_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (activeSplitter < 0 || e.Pointer.PointerId != dragPointerId) return;
+        activeSplitter = -1; SaveColumnWidths();
+    }
     private void ToggleAi_Click(object sender, RoutedEventArgs e)
     {
         aiVisible = !aiVisible;
-        AiColumn.Width = new GridLength(aiVisible ? 320 : 0);
+        AiColumn.Width = new GridLength(aiVisible ? expandedAiWidth : 0);
+        AiSplitter.Visibility = aiVisible ? Visibility.Visible : Visibility.Collapsed;
         AiPane.Visibility = aiVisible ? Visibility.Visible : Visibility.Collapsed;
         ReadingToolbar.Padding = new Thickness(18, aiVisible ? 14 : 40, 18, 14);
         AiToggleButton.Visibility = aiVisible ? Visibility.Visible : Visibility.Collapsed;

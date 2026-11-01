@@ -17,6 +17,32 @@ public record MailAccount(string Address, string UserName, string ImapHost, int 
 public record MailFolderInfo(string Path, string Name, int Depth, bool Selectable);
 public record MailItem(uint Uid, string Sender, string Subject, string Date, string Preview, bool? IsSeen) : System.ComponentModel.INotifyPropertyChanged
 {
+    public string DisplaySender => InternetAddressList.TryParse(Sender, out var addresses) && addresses.Count > 0
+        ? string.Join(", ", addresses.Select(address => !string.IsNullOrWhiteSpace(address.Name) ? address.Name : address is MailboxAddress mailbox ? mailbox.Address : address.ToString()))
+        : Sender;
+    public string Account { get; set; } = "";
+    public string Folder { get; set; } = "";
+    public uint Validity { get; set; }
+    private string importance = "";
+    public string Importance
+    {
+        get => importance;
+        set
+        {
+            importance = value;
+            PropertyChanged?.Invoke(this, new(nameof(Importance)));
+            PropertyChanged?.Invoke(this, new(nameof(ImportanceVisibility)));
+            PropertyChanged?.Invoke(this, new(nameof(ImportanceBrush)));
+        }
+    }
+    public Microsoft.UI.Xaml.Visibility ImportanceVisibility => string.IsNullOrEmpty(importance) ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+    public Microsoft.UI.Xaml.Media.Brush ImportanceBrush => new Microsoft.UI.Xaml.Media.SolidColorBrush(importance switch
+    {
+        "重要" => Windows.UI.Color.FromArgb(255, 190, 49, 49),
+        "一般" => Windows.UI.Color.FromArgb(255, 37, 130, 75),
+        "可忽略" => Windows.UI.Color.FromArgb(255, 164, 108, 0),
+        _ => Windows.UI.Color.FromArgb(255, 105, 116, 132)
+    });
     public bool? IsSeen { get; private set; } = IsSeen;
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     public void MarkSeen()
@@ -46,6 +72,22 @@ public sealed class MailService
     private string? folderName;
     private bool cachedOnly;
     public MailAccount? Account => account;
+    public string? CachedClassification(MailItem item, string fingerprint) => cache.Classification(item, fingerprint);
+    public void CacheClassification(MailItem item, string fingerprint, string label) => cache.PutClassification(item, fingerprint, label);
+    public List<MailItem> CachedSearchItems(string path)
+    {
+        var selectedAccount = account ?? throw new InvalidOperationException("请先配置邮箱。");
+        var currentValidity = cache.Validity(selectedAccount.Address, path);
+        var result = new List<MailItem>();
+        foreach (var uid in cache.Uids(selectedAccount.Address, path, currentValidity))
+        {
+            var item = cache.Get(selectedAccount.Address, path, currentValidity, uid);
+            if (item == null) continue;
+            SetIdentity(item, selectedAccount.Address, path, currentValidity);
+            result.Add(item);
+        }
+        return result;
+    }
 
     public void Load()
     {
@@ -68,12 +110,15 @@ public sealed class MailService
         File.WriteAllText(ConfigPath, JsonSerializer.Serialize(candidate));
         account = candidate; password = secret; ids.Clear(); folderName = null;
     }
-    private static async Task ConnectAsync(ImapClient client, MailAccount a, string secret)
+    private static async Task ConnectAsync(ImapClient client, MailAccount a, string secret, System.Threading.CancellationToken cancellationToken = default)
     {
         client.Timeout = 30000;
-        await client.ConnectAsync(a.ImapHost, a.ImapPort, a.StartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.SslOnConnect);
-        await client.AuthenticateAsync(a.UserName, secret);
+        try { await client.ConnectAsync(a.ImapHost, a.ImapPort, a.StartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.SslOnConnect, cancellationToken); }
+        catch (Exception ex) when (IsTimeout(ex)) { throw new TimeoutException($"连接 IMAP 服务器 {a.ImapHost}:{a.ImapPort} 超时，请检查网络、服务器地址和端口。", ex); }
+        try { await client.AuthenticateAsync(a.UserName, secret, cancellationToken); }
+        catch (Exception ex) when (IsTimeout(ex)) { throw new TimeoutException("IMAP 登录超时，请检查网络和邮箱服务器状态。", ex); }
     }
+    private static bool IsTimeout(Exception ex) => ex is TimeoutException || ex is System.Net.Sockets.SocketException socket && socket.SocketErrorCode == System.Net.Sockets.SocketError.TimedOut || ex.InnerException != null && IsTimeout(ex.InnerException);
     private async Task<ImapClient> ConnectAsync()
     {
         if (account == null || string.IsNullOrEmpty(password)) throw new InvalidOperationException("请先配置邮箱和授权码。");
@@ -88,7 +133,10 @@ public sealed class MailService
         var result = new Dictionary<string, MailFolderInfo>(StringComparer.OrdinalIgnoreCase);
         foreach (var ns in client.PersonalNamespaces)
         {
-            foreach (var f in await client.GetFoldersAsync(ns, StatusItems.None, false))
+            IList<IMailFolder> serverFolders;
+            try { serverFolders = await client.GetFoldersAsync(ns, StatusItems.None, false); }
+            catch (Exception ex) when (IsTimeout(ex)) { throw new TimeoutException("邮箱服务器读取目录列表超时，请稍后点击左侧刷新重试。", ex); }
+            foreach (var f in serverFolders)
             {
                 var label = (f.Attributes & FolderAttributes.Inbox) != 0 ? "收件箱" :
                     (f.Attributes & FolderAttributes.Junk) != 0 ? "垃圾邮件" :
@@ -164,7 +212,7 @@ public sealed class MailService
             foreach (var uid in page)
             {
                 var cached = cache.Get(account!.Address, folderName, validity, uid.Id);
-                if (cached != null && (cachedOnly || Offline)) { yield return cached; continue; }
+                if (cached != null && (cachedOnly || Offline)) { SetIdentity(cached, account!.Address, folderName, validity); yield return cached; continue; }
                 client ??= await ConnectAsync();
                 folder ??= await OpenFolderAsync(client, folderName);
                 if (folder.UidValidity != validity) throw new InvalidOperationException("服务器目录已重建，请重新打开目录。");
@@ -173,11 +221,31 @@ public sealed class MailService
                 catch (ImapCommandException) { summaries = await folder.FetchAsync(new[] { uid }, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Flags); }
                 var summary = summaries.FirstOrDefault();
                 var item = summary == null ? null : new MailItem(uid.Id, summary.Envelope?.From.ToString() ?? "未知发件人", summary.Envelope?.Subject ?? "(无主题)", summary.Envelope?.Date?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "", summary.PreviewText ?? cached?.Preview ?? "", summary.Flags.HasValue ? (summary.Flags.Value & MessageFlags.Seen) != 0 : null);
-                if (item != null) cache.Put(account.Address, folderName, validity, item);
+                if (item != null) { SetIdentity(item, account.Address, folderName, validity); cache.Put(account.Address, folderName, validity, item); }
                 yield return item;
             }
         }
         finally { client?.Dispose(); }
+    }
+    private static void SetIdentity(MailItem item, string account, string folder, uint validity) { item.Account = account; item.Folder = folder; item.Validity = validity; }
+    public async Task<string> GetSearchBodyAsync(MailItem item, System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var cached = cache.Body(item.Account, item.Folder, item.Validity, item.Uid);
+        if (cached != null) return cached;
+        var html = cache.HtmlBody(item.Account, item.Folder, item.Validity, item.Uid);
+        if (html != null) return HtmlTextExtractor.Extract(html);
+        var selectedAccount = account;
+        if (selectedAccount == null || selectedAccount.Address != item.Account || string.IsNullOrEmpty(password)) throw new InvalidOperationException("无法连接邮件账户获取正文。");
+        using var client = new ImapClient();
+        await ConnectAsync(client, selectedAccount, password, cancellationToken);
+        var selectedFolder = await client.GetFolderAsync(item.Folder, cancellationToken);
+        await selectedFolder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+        if (selectedFolder.UidValidity != item.Validity) throw new InvalidOperationException("服务器目录已重建，请重新打开目录。");
+        var message = await selectedFolder.GetMessageAsync(new UniqueId(item.Uid), cancellationToken);
+        var text = message.TextBody ?? (message.HtmlBody != null ? HtmlTextExtractor.Extract(message.HtmlBody) : "");
+        cache.PutBody(item.Account, item.Folder, item.Validity, item.Uid, text);
+        return text;
     }
     public async Task<MailBody> GetBodyAsync(uint uid)
     {

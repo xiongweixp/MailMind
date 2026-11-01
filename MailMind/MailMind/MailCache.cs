@@ -18,7 +18,8 @@ public sealed class MailCache
         using var cmd = db.CreateCommand();
         cmd.CommandText = @"PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS folders (account TEXT NOT NULL, path TEXT NOT NULL, name TEXT NOT NULL, depth INTEGER NOT NULL, selectable INTEGER NOT NULL, validity INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(account,path));
-CREATE TABLE IF NOT EXISTS messages (account TEXT NOT NULL, folder TEXT NOT NULL, validity INTEGER NOT NULL, uid INTEGER NOT NULL, sender TEXT NOT NULL, subject TEXT NOT NULL, date TEXT NOT NULL, preview TEXT NOT NULL, body TEXT, PRIMARY KEY(account,folder,validity,uid));";
+CREATE TABLE IF NOT EXISTS messages (account TEXT NOT NULL, folder TEXT NOT NULL, validity INTEGER NOT NULL, uid INTEGER NOT NULL, sender TEXT NOT NULL, subject TEXT NOT NULL, date TEXT NOT NULL, preview TEXT NOT NULL, body TEXT, PRIMARY KEY(account,folder,validity,uid));
+CREATE TABLE IF NOT EXISTS classifications (account TEXT NOT NULL, folder TEXT NOT NULL, validity INTEGER NOT NULL, uid INTEGER NOT NULL, fingerprint TEXT NOT NULL, label TEXT NOT NULL, PRIMARY KEY(account,folder,validity,uid,fingerprint));";
         cmd.ExecuteNonQuery();
         using var migration = db.CreateCommand();
         migration.CommandText = "PRAGMA table_info(messages)";
@@ -31,6 +32,8 @@ CREATE TABLE IF NOT EXISTS messages (account TEXT NOT NULL, folder TEXT NOT NULL
         if (!hasHtmlVersion) { migration.CommandText = "ALTER TABLE messages ADD COLUMN html_version INTEGER NOT NULL DEFAULT 0"; migration.ExecuteNonQuery(); }
     }
     private SqliteConnection Open() { var db = new SqliteConnection(connectionString); db.Open(); return db; }
+    public string? Classification(MailItem item, string fingerprint) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT label FROM classifications WHERE account=$a AND folder=$f AND validity=$v AND uid=$u AND fingerprint=$fingerprint"; Key(c,item.Account,item.Folder,item.Validity,item.Uid); c.Parameters.AddWithValue("$fingerprint",fingerprint); return c.ExecuteScalar() as string; }
+    public void PutClassification(MailItem item, string fingerprint, string label) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="INSERT OR REPLACE INTO classifications(account,folder,validity,uid,fingerprint,label) VALUES($a,$f,$v,$u,$fingerprint,$label)"; Key(c,item.Account,item.Folder,item.Validity,item.Uid); c.Parameters.AddWithValue("$fingerprint",fingerprint); c.Parameters.AddWithValue("$label",label); c.ExecuteNonQuery(); }
     public void SaveFolders(string account, IReadOnlyList<MailFolderInfo> folders)
     {
         using var db = Open(); using var tx = db.BeginTransaction();
