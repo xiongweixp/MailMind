@@ -102,12 +102,12 @@ public sealed partial class MainWindow : Window
         if (message == ncDestroy && windowSubclass != null) RemoveWindowSubclass(hwnd, windowSubclass, subclassId);
         return DefSubclassProc(hwnd, message, wParam, lParam);
     }
-    private async Task ClassifyAsync(MailItem item)
+    private async Task ClassifyAsync(MailItem item, bool force = false)
     {
         var settings = decision.Settings;
         var fingerprint = DecisionService.Fingerprint(settings, item);
         string? cached;
-        try { cached = mail.CachedClassification(item, fingerprint); }
+        try { cached = force ? null : mail.CachedClassification(item, fingerprint); }
         catch (Exception ex) { item.Importance = "失败"; if (!closing) ListStatus.Text = "读取 AI 分类缓存失败：" + ex.Message; return; }
         if (cached != null) { item.Importance = cached; return; }
         if (!settings.Enabled) { item.Importance = ""; return; }
@@ -117,7 +117,7 @@ public sealed partial class MainWindow : Window
         try
         {
             if (!System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) || decision.Settings != settings) return;
-            cached = mail.CachedClassification(item, fingerprint);
+            cached = force ? null : mail.CachedClassification(item, fingerprint);
             if (cached != null) { item.Importance = cached; return; }
             item.Importance = "判断中";
             var result = await decision.ClassifyAsync(settings, item, windowLifetime.Token);
@@ -578,20 +578,51 @@ public sealed partial class MainWindow : Window
             new TextBlock { Text = "发送邮件 · SMTP", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 0) },
             smtpHost, smtpPort, smtpSsl } };
         var ai = decision.Settings;
-        var engine = new ComboBox { Header = "大模型引擎", HorizontalAlignment = HorizontalAlignment.Stretch, Items = { "LM Studio", "Lemonade Server" }, SelectedIndex = ai.Engine == "Lemonade Server" ? 1 : 0 };
+        var engine = new ComboBox { Header = "AI 服务", HorizontalAlignment = HorizontalAlignment.Stretch, Items = { "LM Studio", "Lemonade Server" }, SelectedIndex = ai.Engine == "Lemonade Server" ? 1 : 0 };
         var aiPort = new TextBox { Header = "端口", Text = ai.Port.ToString() };
-        engine.SelectionChanged += (_, _) => aiPort.Text = engine.SelectedIndex == 0 ? "1234" : "13305";
-        var model = new TextBox { Header = "Decision 模型", Text = ai.Model, PlaceholderText = "输入模型 ID" };
+        var model = new ComboBox { Header = "判断模型（Decision）", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var chatModel = new ComboBox { Header = "生成模型（用于后续总结和写作）", HorizontalAlignment = HorizontalAlignment.Stretch };
+        var profile = new TextBox { Header = "自我介绍", Text = ai.Profile ?? "", PlaceholderText = "例如：我是产品经理，关注项目进度、客户反馈和安全问题。", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 100 };
+        var modelStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        var refreshModels = new Button { Content = "刷新模型列表" };
+        async Task RefreshModelsAsync()
+        {
+            if (!int.TryParse(aiPort.Text, out int number) || number < 1 || number > 65535) { modelStatus.Text = "请输入有效端口。"; return; }
+            string selectedDecision = model.SelectedItem as string ?? ai.Model;
+            string selectedChat = chatModel.SelectedItem as string ?? ai.ChatModel;
+            refreshModels.IsEnabled = false;
+            try
+            {
+                modelStatus.Text = "正在获取模型列表…";
+                var models = await decision.ListModelsAsync(engine.SelectedItem?.ToString() ?? "LM Studio", number, windowLifetime.Token);
+                model.Items.Clear(); chatModel.Items.Clear();
+                foreach (var entry in models)
+                {
+                    if (entry.Type == "decision") model.Items.Add(entry.Id);
+                    else if (entry.Type is "llm" or "vlm") chatModel.Items.Add(entry.Id);
+                }
+                if (model.Items.Contains(selectedDecision)) model.SelectedItem = selectedDecision;
+                else if (model.Items.Count > 0) model.SelectedIndex = 0;
+                if (chatModel.Items.Contains(selectedChat)) chatModel.SelectedItem = selectedChat;
+                else if (chatModel.Items.Count > 0) chatModel.SelectedIndex = 0;
+                modelStatus.Text = $"发现 {model.Items.Count} 个判断模型、{chatModel.Items.Count} 个生成模型。";
+            }
+            catch (Exception ex) { modelStatus.Text = "获取模型失败：" + ex.Message; }
+            finally { refreshModels.IsEnabled = true; }
+        }
+        refreshModels.Click += async (_, _) => await RefreshModelsAsync();
+        engine.SelectionChanged += async (_, _) => { aiPort.Text = engine.SelectedIndex == 0 ? "1234" : "13305"; await RefreshModelsAsync(); };
         var enabled = new CheckBox { Content = "为加载的邮件自动判断重要性", IsChecked = ai.Enabled };
-        var aiPanel = new StackPanel { Spacing = 10, Children = { new TextBlock { Text = "大模型设备", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, new TextBlock { Text = "连接本机 OpenAI 兼容接口。分类使用发件人、主题和邮件预览。", TextWrapping = TextWrapping.Wrap }, engine, aiPort, model, enabled } };
-        var navigation = new ListView { Width = 160, SelectionMode = ListViewSelectionMode.Single, Items = { "收发服务器", "大模型设备" }, SelectedIndex = 0 };
+        var relabel = new Button { Content = "重新标记当前文件夹已加载的邮件" };
+        var aiPanel = new StackPanel { Spacing = 10, Children = { new TextBlock { Text = "AI 设置", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, new TextBlock { Text = "判断模型用于重要性标记和 AI 搜索。个人介绍帮助 AI 理解你的角色与关注点。", TextWrapping = TextWrapping.Wrap }, engine, aiPort, refreshModels, modelStatus, model, chatModel, profile, enabled, relabel } };
+        var navigation = new ListView { Width = 160, SelectionMode = ListViewSelectionMode.Single, Items = { "收发服务器", "AI 设置" }, SelectedIndex = 0 };
         var layout = new Grid { Width = 720, MaxWidth = 720, ColumnSpacing = 24 };
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         layout.Children.Add(navigation);
         var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         var save = new Button { Content = "测试并保存" };
-        navigation.SelectionChanged += (_, _) => { scroll.Content = navigation.SelectedIndex == 0 ? panel : aiPanel; save.Content = navigation.SelectedIndex == 0 ? "测试并保存" : "保存"; error.Text = ""; };
+        navigation.SelectionChanged += async (_, _) => { scroll.Content = navigation.SelectedIndex == 0 ? panel : aiPanel; save.Content = navigation.SelectedIndex == 0 ? "测试并保存" : "保存"; error.Text = ""; if (navigation.SelectedIndex == 1) await RefreshModelsAsync(); };
         var cancel = new Button { Content = "取消" };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0), Children = { cancel, save } };
         var page = new Grid { Height = 500, RowSpacing = 8 };
@@ -605,6 +636,18 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog { XamlRoot = ComposeWorkspace.XamlRoot, Title = "设置", Content = layout };
         dialog.Resources["ContentDialogMaxWidth"] = 800.0;
         bool saved = false;
+        relabel.Click += async (_, _) =>
+        {
+            if (!decision.Settings.Enabled) { error.Text = "请先保存并启用 AI 重要性判断。"; return; }
+            relabel.IsEnabled = false;
+            try
+            {
+                var items = System.Linq.Enumerable.ToArray(messages);
+                for (int i = 0; i < items.Length; i++) { error.Text = $"正在重新标记 {i + 1}/{items.Length}…"; await ClassifyAsync(items[i], true); }
+                error.Text = $"重新标记完成，共 {items.Length} 封；失败的邮件会显示“失败”。";
+            }
+            finally { relabel.IsEnabled = true; }
+        };
         cancel.Click += (_, _) => dialog.Hide();
         save.Click += async (_, _) =>
         {
@@ -613,8 +656,8 @@ public sealed partial class MainWindow : Window
             {
                 if (navigation.SelectedIndex == 1)
                 {
-                    if (!int.TryParse(aiPort.Text, out int aiNumber) || aiNumber < 1 || aiNumber > 65535 || string.IsNullOrWhiteSpace(model.Text)) { error.Text = "请填写有效端口和模型 ID。"; return; }
-                    var settings = new AiSettings(engine.SelectedItem?.ToString() ?? "LM Studio", aiNumber, model.Text.Trim(), enabled.IsChecked == true);
+                    if (!int.TryParse(aiPort.Text, out int aiNumber) || aiNumber < 1 || aiNumber > 65535 || (enabled.IsChecked == true && model.SelectedItem is not string)) { error.Text = "请填写有效端口并选择判断模型。"; return; }
+                    var settings = new AiSettings(engine.SelectedItem?.ToString() ?? "LM Studio", aiNumber, model.SelectedItem as string ?? "", enabled.IsChecked == true, profile.Text.Trim(), chatModel.SelectedItem as string ?? "");
                     if (settings.Enabled)
                     {
                         error.Text = "正在测试模型…";
