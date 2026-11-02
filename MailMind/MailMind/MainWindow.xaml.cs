@@ -52,6 +52,8 @@ public sealed partial class MainWindow : Window
     private bool pageLoadFailed, pageCheckQueued;
     private DateTime? searchDate;
     private bool htmlResourceHandlerReady;
+    private MailAttachment? previewAttachment;
+    private SystemPreviewHost? systemPreview;
     private readonly System.Collections.Generic.Dictionary<string, string> htmlDocuments = new();
     private readonly System.Collections.Generic.Dictionary<string, Button> folderButtons = new();
     public MainWindow()
@@ -61,7 +63,8 @@ public sealed partial class MainWindow : Window
         windowSubclass = WindowMessage;
         if (!SetWindowSubclass(WinRT.Interop.WindowNative.GetWindowHandle(this), windowSubclass, 1, 0))
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-        AppWindow.Closing += (_, _) => { closing = true; searchCancellation?.Cancel(); windowLifetime.Cancel(); };
+        AppWindow.Closing += (_, _) => { closing = true; searchCancellation?.Cancel(); windowLifetime.Cancel(); systemPreview?.Dispose(); };
+        AppWindow.Changed += (_, _) => UpdatePreviewBounds();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragRegion);
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
@@ -288,11 +291,81 @@ public sealed partial class MainWindow : Window
     {
         if (closing || MailList.SelectedItem is not MailItem item) return;
         if (ComposeWorkspace.Visibility == Visibility.Visible) { MailList.SelectedItem = null; await ShowNotice("正在写邮件", "请先关闭写信区，再打开邮件。"); return; }
-        EmptyWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Visible;
+        EmptyWorkspace.Visibility = Visibility.Collapsed; PreviewWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Visible; ReadingToolbar.Visibility = Visibility.Visible;
+        systemPreview?.Close(); previewAttachment = null; AttachmentPanel.Visibility = Visibility.Collapsed; AttachmentList.ItemsSource = null;
         ReadSubject.Text = item.Subject; ReadSender.Text = item.Sender + "  ·  " + item.Date; ReadBody.Text = "正在加载正文…"; HtmlView.Visibility = Visibility.Collapsed; PlainScroll.Visibility = Visibility.Visible;
         if (item.IsSeen != true) _ = MarkSeenAsync(item);
         try { var body = await mail.GetBodyAsync(item.Uid); if (!closing && ReferenceEquals(MailList.SelectedItem, item)) { if (body.IsHtml) await ShowHtmlAsync(body.Content, item); else ReadBody.Text = body.Content; } }
         catch (Exception ex) { if (!closing && ReferenceEquals(MailList.SelectedItem, item)) ReadBody.Text = "加载正文失败：" + ex.Message; }
+        try
+        {
+            var attachments = await mail.GetAttachmentsAsync(item);
+            if (!closing && ReferenceEquals(MailList.SelectedItem, item) && attachments.Count > 0)
+            {
+                AttachmentHeading.Text = $"附件（{attachments.Count}）"; AttachmentList.ItemsSource = attachments; AttachmentPanel.Visibility = Visibility.Visible;
+            }
+        }
+        catch (Exception ex) { if (!closing && ReferenceEquals(MailList.SelectedItem, item)) { AttachmentHeading.Text = "附件加载失败：" + ex.Message; AttachmentPanel.Visibility = Visibility.Visible; } }
+    }
+    private async void Attachment_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: MailAttachment attachment }) return;
+        previewAttachment = attachment; ReadingWorkspace.Visibility = Visibility.Collapsed; ReadingToolbar.Visibility = Visibility.Collapsed; PreviewWorkspace.Visibility = Visibility.Visible;
+        PreviewName.Text = attachment.Name; PreviewSize.Text = attachment.SizeLabel; PreviewMessage.Text = "正在加载预览…";
+        PreviewProgress.Visibility = Visibility.Visible; PreviewProgress.IsActive = true;
+        try
+        {
+            await Task.Yield();
+            if (!ReferenceEquals(previewAttachment, attachment)) return;
+            PreviewWorkspace.UpdateLayout();
+            systemPreview ??= new SystemPreviewHost();
+            var bounds = PreviewBounds();
+            if (bounds.width <= 1 || bounds.height <= 1) throw new InvalidOperationException("预览区域尚未完成布局，请返回邮件后重试。");
+            await systemPreview.ShowAsync(WinRT.Interop.WindowNative.GetWindowHandle(this), attachment, bounds.x, bounds.y, bounds.width, bounds.height);
+            if (ReferenceEquals(previewAttachment, attachment))
+            {
+                // Layout can change while the out-of-process Office previewer starts.
+                bounds = PreviewBounds(); systemPreview.Resize(bounds.x, bounds.y, bounds.width, bounds.height);
+                PreviewMessage.Text = "";
+            }
+        }
+        catch (Exception ex) { if (ReferenceEquals(previewAttachment, attachment)) PreviewMessage.Text = "无法预览此附件：" + ex.Message; }
+        finally { if (ReferenceEquals(previewAttachment, attachment)) { PreviewProgress.IsActive = false; PreviewProgress.Visibility = Visibility.Collapsed; } }
+    }
+    private (int x, int y, int width, int height) PreviewBounds()
+    {
+        var point = PreviewSurface.TransformToVisual((UIElement)Content).TransformPoint(new Windows.Foundation.Point(0, 0));
+        var scale = PreviewSurface.XamlRoot.RasterizationScale;
+        return ((int)Math.Round(point.X * scale), (int)Math.Round(point.Y * scale), (int)Math.Round(PreviewSurface.ActualWidth * scale), (int)Math.Round(PreviewSurface.ActualHeight * scale));
+    }
+    private void PreviewSurface_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdatePreviewBounds();
+    }
+    private void UpdatePreviewBounds()
+    {
+        if (previewAttachment == null || systemPreview == null || PreviewWorkspace.Visibility != Visibility.Visible) return;
+        var bounds = PreviewBounds(); systemPreview.Resize(bounds.x, bounds.y, bounds.width, bounds.height);
+    }
+    private void BackFromPreview_Click(object sender, RoutedEventArgs e)
+    {
+        previewAttachment = null; systemPreview?.Close(); PreviewWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Visible; ReadingToolbar.Visibility = Visibility.Visible;
+    }
+    private async void SaveAttachment_Click(object sender, RoutedEventArgs e)
+    {
+        var attachment = previewAttachment; if (attachment == null) return;
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileSavePicker();
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var safeName = Path.GetFileName(attachment.Name.Replace('\\', '/'));
+            var extension = Path.GetExtension(safeName);
+            if (string.IsNullOrWhiteSpace(extension) || extension.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) extension = ".bin";
+            picker.SuggestedFileName = Path.GetFileNameWithoutExtension(safeName); picker.FileTypeChoices.Add("附件", new System.Collections.Generic.List<string> { extension });
+            var file = await picker.PickSaveFileAsync();
+            if (file != null) await Windows.Storage.FileIO.WriteBytesAsync(file, attachment.Data);
+        }
+        catch (Exception ex) { await ShowNotice("保存附件失败", ex.Message); }
     }
     private async Task MarkSeenAsync(MailItem item)
     {
@@ -468,7 +541,7 @@ public sealed partial class MainWindow : Window
         ApplySearch();
     }
     private async void Refresh_Click(object sender, RoutedEventArgs e) { if (mail.Account != null) await LoadFoldersAsync(); }
-    private void Compose_Click(object sender, RoutedEventArgs e) { EmptyWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Collapsed; ComposeWorkspace.Visibility = Visibility.Visible; }
+    private void Compose_Click(object sender, RoutedEventArgs e) { systemPreview?.Close(); previewAttachment = null; PreviewWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Collapsed; ReadingToolbar.Visibility = Visibility.Collapsed; ComposeWorkspace.Visibility = Visibility.Visible; }
     private async void CloseCompose_Click(object sender, RoutedEventArgs e)
     {
         if (!string.IsNullOrWhiteSpace(ToBox.Text + SubjectBox.Text + BodyBox.Text))

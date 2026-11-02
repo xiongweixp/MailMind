@@ -23,6 +23,13 @@ public record MailItem(uint Uid, string Sender, string Subject, string Date, str
     public string Account { get; set; } = "";
     public string Folder { get; set; } = "";
     public uint Validity { get; set; }
+    private bool? hasAttachments;
+    public bool? HasAttachments
+    {
+        get => hasAttachments;
+        set { hasAttachments = value; PropertyChanged?.Invoke(this, new(nameof(HasAttachments))); PropertyChanged?.Invoke(this, new(nameof(AttachmentVisibility))); }
+    }
+    public Microsoft.UI.Xaml.Visibility AttachmentVisibility => HasAttachments == true ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
     private string importance = "";
     public string Importance
     {
@@ -56,6 +63,10 @@ public record MailItem(uint Uid, string Sender, string Subject, string Date, str
     public Windows.UI.Text.FontWeight MailWeight => IsSeen == false ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
 }
 public record MailBody(string Content, bool IsHtml);
+public record MailAttachment(string Name, string ContentType, byte[] Data)
+{
+    public string SizeLabel => Data.Length < 1024 ? $"{Data.Length} B" : Data.Length < 1024 * 1024 ? $"{Data.Length / 1024.0:F1} KB" : $"{Data.Length / (1024.0 * 1024):F1} MB";
+}
 
 public sealed class MailService
 {
@@ -218,11 +229,11 @@ public sealed class MailService
                 folder ??= await OpenFolderAsync(client, folderName);
                 if (folder.UidValidity != validity) throw new InvalidOperationException("服务器目录已重建，请重新打开目录。");
                 IList<IMessageSummary> summaries;
-                try { summaries = await folder.FetchAsync(new[] { uid }, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.PreviewText | MessageSummaryItems.Flags); }
-                catch (ImapCommandException) { summaries = await folder.FetchAsync(new[] { uid }, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Flags); }
+                try { summaries = await folder.FetchAsync(new[] { uid }, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.PreviewText | MessageSummaryItems.Flags | MessageSummaryItems.BodyStructure); }
+                catch (ImapCommandException) { summaries = await folder.FetchAsync(new[] { uid }, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Flags | MessageSummaryItems.BodyStructure); }
                 var summary = summaries.FirstOrDefault();
                 var item = summary == null ? null : new MailItem(uid.Id, summary.Envelope?.From.ToString() ?? "未知发件人", summary.Envelope?.Subject ?? "(无主题)", summary.Envelope?.Date?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "", summary.PreviewText ?? cached?.Preview ?? "", summary.Flags.HasValue ? (summary.Flags.Value & MessageFlags.Seen) != 0 : null);
-                if (item != null) { SetIdentity(item, account.Address, folderName, validity); cache.Put(account.Address, folderName, validity, item); }
+                if (item != null) { item.HasAttachments = summary!.Body != null ? summary.Attachments.Any() : cached?.HasAttachments; SetIdentity(item, account.Address, folderName, validity); cache.Put(account.Address, folderName, validity, item); cache.PutAttachmentFlag(item); }
                 yield return item;
             }
         }
@@ -271,6 +282,32 @@ public sealed class MailService
         }
         catch when (html != null) { return new(html, true); }
         catch when (cached != null) { return new(cached, false); }
+    }
+    public async Task<IReadOnlyList<MailAttachment>> GetAttachmentsAsync(MailItem item)
+    {
+        var cached = cache.Attachments(item);
+        if (cached != null) { item.HasAttachments = cached.Count > 0; return cached; }
+        var selectedAccount = account;
+        if (selectedAccount == null || selectedAccount.Address != item.Account || string.IsNullOrEmpty(password)) throw new InvalidOperationException("无法连接邮件账户获取附件。");
+        using var client = new ImapClient();
+        await ConnectAsync(client, selectedAccount, password);
+        var selectedFolder = await OpenFolderAsync(client, item.Folder);
+        if (selectedFolder.UidValidity != item.Validity) throw new InvalidOperationException("服务器目录已重建，请重新打开目录。");
+        var message = await selectedFolder.GetMessageAsync(new UniqueId(item.Uid));
+        var result = new List<MailAttachment>();
+        foreach (var entity in message.Attachments)
+        {
+            using var stream = new MemoryStream();
+            string name;
+            if (entity is MimePart part) { name = part.FileName ?? "附件"; if (part.Content != null) await part.Content.DecodeToAsync(stream); }
+            else if (entity is MessagePart attachedMessage) { name = attachedMessage.ContentDisposition?.FileName ?? "邮件附件.eml"; if (attachedMessage.Message != null) await attachedMessage.Message.WriteToAsync(stream); }
+            else continue;
+            result.Add(new(name, entity.ContentType.MimeType, stream.ToArray()));
+        }
+        cache.PutAttachments(item, result);
+        item.HasAttachments = result.Count > 0;
+        cache.PutAttachmentFlag(item);
+        return result;
     }
     public async Task MarkSeenAsync(uint uid)
     {
