@@ -16,6 +16,7 @@
   <ItemGroup>
     <Content Include="Assets\MailMind.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\MailMind.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\MailMindAI-A-224.png" CopyToOutputDirectory="PreserveNewest" />
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 

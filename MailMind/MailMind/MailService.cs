@@ -63,6 +63,7 @@ public record MailItem(uint Uid, string Sender, string Subject, string Date, str
     public Windows.UI.Text.FontWeight MailWeight => IsSeen == false ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
 }
 public record MailBody(string Content, bool IsHtml);
+public record ReplyDraft(string To, string Cc, string Subject, string Text, string Sender, string Date, string? MessageId, string[] References);
 public record MailAttachment(string Name, string ContentType, byte[] Data)
 {
     public string SizeLabel => Data.Length < 1024 ? $"{Data.Length} B" : Data.Length < 1024 * 1024 ? $"{Data.Length / 1024.0:F1} KB" : $"{Data.Length / (1024.0 * 1024):F1} MB";
@@ -121,7 +122,7 @@ public sealed class MailService
         File.WriteAllText(ConfigPath, JsonSerializer.Serialize(candidate));
         account = candidate; password = secret; ids.Clear(); folderName = null;
     }
-    public async Task SendAsync(string from, string to, string cc, string subject, string html, string text, System.Threading.CancellationToken token)
+    public async Task SendAsync(string from, string to, string cc, string subject, string html, string text, System.Threading.CancellationToken token, ReplyDraft? reply = null)
     {
         var selected = account ?? throw new InvalidOperationException("请先配置邮箱。");
         if (from != selected.Address || string.IsNullOrEmpty(password)) throw new InvalidOperationException("邮箱账户或授权码不可用，请重新配置邮箱。");
@@ -136,6 +137,12 @@ public sealed class MailService
             message.Cc.AddRange(copies);
         }
         message.Subject = subject;
+        if (reply?.MessageId is string messageId && !string.IsNullOrWhiteSpace(messageId))
+        {
+            message.InReplyTo = messageId;
+            foreach (var reference in reply.References) message.References.Add(reference);
+            if (!message.References.Contains(messageId)) message.References.Add(messageId);
+        }
         message.Body = new BodyBuilder { HtmlBody = html, TextBody = text }.ToMessageBody();
         using var client = new MailKit.Net.Smtp.SmtpClient { Timeout = 30000 };
         await client.ConnectAsync(selected.SmtpHost, selected.SmtpPort, selected.SmtpStartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.SslOnConnect, token);
@@ -280,6 +287,32 @@ public sealed class MailService
         var text = message.TextBody ?? (message.HtmlBody != null ? HtmlTextExtractor.Extract(message.HtmlBody) : "");
         cache.PutBody(item.Account, item.Folder, item.Validity, item.Uid, text);
         return text;
+    }
+    public async Task<ReplyDraft> GetReplyDraftAsync(MailItem item, bool replyAll, System.Threading.CancellationToken cancellationToken)
+    {
+        var selected = account;
+        if (selected == null || selected.Address != item.Account || string.IsNullOrEmpty(password)) throw new InvalidOperationException("无法连接邮件账户获取回复信息。");
+        using var client = new ImapClient();
+        await ConnectAsync(client, selected, password, cancellationToken);
+        var selectedFolder = await client.GetFolderAsync(item.Folder, cancellationToken);
+        await selectedFolder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+        if (selectedFolder.UidValidity != item.Validity) throw new InvalidOperationException("服务器目录已重建，请重新打开目录。");
+        var original = await selectedFolder.GetMessageAsync(new UniqueId(item.Uid), cancellationToken);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { selected.Address };
+        var to = new InternetAddressList();
+        var cc = new InternetAddressList();
+        void Add(InternetAddressList target, IEnumerable<MailboxAddress> addresses)
+        {
+            foreach (var address in addresses) if (seen.Add(address.Address)) target.Add(address);
+        }
+        Add(to, (original.ReplyTo.Count > 0 ? original.ReplyTo : original.From).Mailboxes);
+        if (replyAll) { Add(to, original.To.Mailboxes); Add(cc, original.Cc.Mailboxes); }
+        if (to.Count == 0) Add(to, original.To.Mailboxes);
+        if (to.Count == 0) throw new InvalidOperationException("原邮件没有可用的回复地址。");
+        var subject = original.Subject ?? "";
+        if (!subject.StartsWith("Re:", StringComparison.OrdinalIgnoreCase)) subject = "Re: " + subject;
+        var text = original.TextBody ?? (original.HtmlBody != null ? HtmlTextExtractor.Extract(original.HtmlBody) : "");
+        return new(to.ToString(), cc.ToString(), subject, text, original.From.ToString(), original.Date.ToLocalTime().ToString("g"), original.MessageId, original.References.ToArray());
     }
     public async Task<MailBody> GetBodyAsync(uint uid)
     {

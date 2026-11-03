@@ -55,6 +55,7 @@ public sealed partial class MainWindow : Window
     private MailAttachment? previewAttachment;
     private SystemPreviewHost? systemPreview;
     private readonly System.Collections.Generic.Dictionary<string, string> htmlDocuments = new();
+    private string? displayedHtml;
     private readonly System.Collections.Generic.Dictionary<string, Button> folderButtons = new();
     public MainWindow()
     {
@@ -151,6 +152,19 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.ButtonInactiveForegroundColor = dark ? Windows.UI.Color.FromArgb(255, 165, 165, 165) : Microsoft.UI.Colors.Gray;
         UpdateFolderSelection(folder);
         UpdateDateFilterColor();
+        if (composeReady) _ = UpdateComposeThemeAsync();
+        if (displayedHtml != null && HtmlView.Visibility == Visibility.Visible) RenderHtml(displayedHtml);
+    }
+    private async Task UpdateComposeThemeAsync()
+    {
+        bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
+        string background = dark ? "#202020" : "#ffffff";
+        string foreground = dark ? "#f2f3f5" : "#17233a";
+        try
+        {
+            await BodyBox.CoreWebView2.ExecuteScriptAsync($"document.documentElement.style.backgroundColor = '{background}'; document.body.style.color = '{foreground}'; document.body.style.caretColor = '{foreground}';");
+        }
+        catch (Exception) when (closing) { }
     }
     private void UpdateDateFilterColor()
     {
@@ -309,6 +323,7 @@ public sealed partial class MainWindow : Window
     {
         if (closing || MailList.SelectedItem is not MailItem item) return;
         if (ComposeWorkspace.Visibility == Visibility.Visible) { MailList.SelectedItem = null; await ShowNotice("正在写邮件", "请先关闭写信区，再打开邮件。"); return; }
+        displayedHtml = null;
         EmptyWorkspace.Visibility = Visibility.Collapsed; PreviewWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Visible; ReadingToolbar.Visibility = Visibility.Visible;
         systemPreview?.Close(); previewAttachment = null; AttachmentPanel.Visibility = Visibility.Collapsed; AttachmentList.ItemsSource = null;
         ReadSubject.Text = item.Subject; ReadSender.Text = item.Sender + "  ·  " + item.Date; ReadBody.Text = "正在加载正文…"; HtmlView.Visibility = Visibility.Collapsed; PlainScroll.Visibility = Visibility.Visible;
@@ -419,13 +434,25 @@ public sealed partial class MainWindow : Window
             };
             htmlResourceHandlerReady = true;
         }
+        displayedHtml = html;
+        RenderHtml(html);
+        PlainScroll.Visibility = Visibility.Collapsed; HtmlView.Visibility = Visibility.Visible;
+    }
+    private void RenderHtml(string html)
+    {
+        bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
+        string colors = dark
+            ? "<style>html,body{background:#202020!important;color:#f2f3f5!important}body *{background-color:transparent!important;color:#f2f3f5!important}body a,body a *{color:#91baff!important}</style>"
+            : "";
+        string thumb = dark ? "#a8a8a8" : "#8a8a8a";
+        string thumbHover = dark ? "#c6c6c6" : "#606060";
+        string scrollbars = $"<style>::-webkit-scrollbar{{width:12px;height:12px}}::-webkit-scrollbar-track{{background:transparent}}::-webkit-scrollbar-thumb{{background:{thumb};border:4px solid transparent;border-radius:8px;background-clip:padding-box}}::-webkit-scrollbar-thumb:hover{{background-color:{thumbHover};border-width:3px}}::-webkit-scrollbar-corner{{background:transparent}}</style>";
         // The sandbox prevents email content from running scripts or navigating the app.
-        var document = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'\"><style>body{margin:0}iframe{border:0;width:100%;height:100vh}</style><iframe sandbox srcdoc=\"" + System.Net.WebUtility.HtmlEncode("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'\">" + html) + "\"></iframe>";
+        var document = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'\"><style>html,body{margin:0;height:100%;overflow:hidden;background:" + (dark ? "#202020" : "#fff") + "}iframe{display:block;border:0;width:100%;height:100%}</style><iframe sandbox srcdoc=\"" + System.Net.WebUtility.HtmlEncode("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'\">" + html + colors + scrollbars) + "\"></iframe>";
         var documentUri = "http://mailmind.invalid/" + Guid.NewGuid().ToString("N");
         htmlDocuments.Clear();
         htmlDocuments[documentUri] = document;
         HtmlView.Source = new Uri(documentUri);
-        PlainScroll.Visibility = Visibility.Collapsed; HtmlView.Visibility = Visibility.Visible;
     }
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
@@ -560,10 +587,15 @@ public sealed partial class MainWindow : Window
     }
     private async void Refresh_Click(object sender, RoutedEventArgs e) { if (mail.Account != null) await LoadFoldersAsync(); }
     private bool composeReady, sending;
+    private bool preparingReply;
+    private ReplyDraft? replyDraft;
     private int sendStatusVersion;
     private async void Compose_Click(object sender, RoutedEventArgs e)
     {
-        if (sending) return;
+        if (!sending && !preparingReply) await OpenComposeAsync();
+    }
+    private async Task OpenComposeAsync()
+    {
         systemPreview?.Close(); previewAttachment = null; PreviewWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Collapsed; ReadingToolbar.Visibility = Visibility.Collapsed;
         FromBox.Items.Clear(); if (mail.Account != null) { FromBox.Items.Add(mail.Account.Address); FromBox.SelectedIndex = 0; }
         ComposeWorkspace.Visibility = Visibility.Visible;
@@ -572,11 +604,44 @@ public sealed partial class MainWindow : Window
             try
             {
                 await BodyBox.EnsureCoreWebView2Async();
+                var navigation = new TaskCompletionSource<bool>();
+                void OnNavigationCompleted(Microsoft.UI.Xaml.Controls.WebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs args)
+                {
+                    BodyBox.NavigationCompleted -= OnNavigationCompleted;
+                    if (args.IsSuccess) navigation.TrySetResult(true);
+                    else navigation.TrySetException(new InvalidOperationException("正文编辑器加载失败。"));
+                }
+                BodyBox.NavigationCompleted += OnNavigationCompleted;
                 BodyBox.NavigateToString("<!doctype html><html><head><meta charset='utf-8'><style>body{font:16px 'Microsoft YaHei',sans-serif;line-height:1.6;margin:14px;outline:none}table{border-collapse:collapse}td,th{border:1px solid #888;min-width:80px;padding:6px}</style></head><body contenteditable='true'></body></html>");
+                await navigation.Task;
                 composeReady = true;
+                await UpdateComposeThemeAsync();
             }
             catch (Exception ex) { await ShowNotice("无法打开正文编辑器", ex.Message); }
         }
+    }
+    private async void Reply_Click(object sender, RoutedEventArgs e) => await StartReplyAsync(false);
+    private async void ReplyAll_Click(object sender, RoutedEventArgs e) => await StartReplyAsync(true);
+    private async Task StartReplyAsync(bool replyAll)
+    {
+        if (sending || preparingReply || MailList.SelectedItem is not MailItem item) return;
+        preparingReply = true;
+        try
+        {
+            var draft = await mail.GetReplyDraftAsync(item, replyAll, windowLifetime.Token);
+            if (closing || !ReferenceEquals(MailList.SelectedItem, item) || ComposeWorkspace.Visibility == Visibility.Visible) return;
+            await OpenComposeAsync();
+            if (!composeReady || closing) return;
+            replyDraft = draft;
+            ToBox.Text = draft.To; CcBox.Text = draft.Cc; SubjectBox.Text = draft.Subject;
+            string header = System.Net.WebUtility.HtmlEncode($"{draft.Date}，{draft.Sender} 写道：");
+            string quoted = System.Net.WebUtility.HtmlEncode(draft.Text);
+            string html = $"<p><br></p><p>{header}</p><blockquote style='margin:0 0 0 8px;padding-left:12px;border-left:2px solid #c8d1de;white-space:pre-wrap'>{quoted}</blockquote>";
+            await BodyBox.CoreWebView2.ExecuteScriptAsync($"document.body.innerHTML = {System.Text.Json.JsonSerializer.Serialize(html)}; window.getSelection().collapse(document.body.firstChild, 0); document.body.focus();");
+        }
+        catch (OperationCanceledException) when (closing) { }
+        catch (Exception ex) { if (!closing) await ShowNotice("无法回复邮件", ex.Message); }
+        finally { preparingReply = false; }
     }
     private async Task<string> EditorValueAsync(string expression)
     {
@@ -602,6 +667,7 @@ public sealed partial class MainWindow : Window
     }
     private async Task ClearComposeAsync(bool closeWorkspace = true)
     {
+        replyDraft = null;
         ToBox.Text = CcBox.Text = SubjectBox.Text = "";
         if (composeReady) await BodyBox.CoreWebView2.ExecuteScriptAsync("document.body.innerHTML = ''; ");
         if (closeWorkspace) { ComposeWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Visible; }
@@ -673,7 +739,7 @@ public sealed partial class MainWindow : Window
         {
             string html = await EditorValueAsync("document.body.innerHTML");
             string text = await EditorValueAsync("document.body.innerText");
-            await mail.SendAsync(FromBox.SelectedItem as string ?? "", ToBox.Text, CcBox.Text, SubjectBox.Text, "<!doctype html><html><body>" + html + "</body></html>", text, windowLifetime.Token);
+            await mail.SendAsync(FromBox.SelectedItem as string ?? "", ToBox.Text, CcBox.Text, SubjectBox.Text, "<!doctype html><html><body>" + html + "</body></html>", text, windowLifetime.Token, replyDraft);
             accepted = true;
             await ClearComposeAsync(false);
             SendStatusText.Text = "邮件发送成功";
@@ -886,7 +952,8 @@ public sealed partial class MainWindow : Window
         AiColumn.Width = new GridLength(aiVisible ? expandedAiWidth : 0);
         AiSplitter.Visibility = aiVisible ? Visibility.Visible : Visibility.Collapsed;
         AiPane.Visibility = aiVisible ? Visibility.Visible : Visibility.Collapsed;
-        ReadingToolbar.Padding = new Thickness(18, aiVisible ? 14 : 40, 18, 14);
+        // Keep the actions clear of the window controls when the AI pane is hidden.
+        ReadingToolbar.Padding = new Thickness(18, 4, aiVisible ? 18 : AppWindow.TitleBar.RightInset + 18, 12);
         AiToggleButton.Visibility = aiVisible ? Visibility.Visible : Visibility.Collapsed;
         AiFloatingButton.Visibility = aiVisible ? Visibility.Collapsed : Visibility.Visible;
     }
