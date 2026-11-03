@@ -121,6 +121,28 @@ public sealed class MailService
         File.WriteAllText(ConfigPath, JsonSerializer.Serialize(candidate));
         account = candidate; password = secret; ids.Clear(); folderName = null;
     }
+    public async Task SendAsync(string from, string to, string cc, string subject, string html, string text, System.Threading.CancellationToken token)
+    {
+        var selected = account ?? throw new InvalidOperationException("请先配置邮箱。");
+        if (from != selected.Address || string.IsNullOrEmpty(password)) throw new InvalidOperationException("邮箱账户或授权码不可用，请重新配置邮箱。");
+        if (string.IsNullOrWhiteSpace(selected.SmtpHost) || selected.SmtpPort is < 1 or > 65535) throw new InvalidOperationException("请先在设置中配置 SMTP 服务器和端口。");
+        var message = new MimeMessage();
+        message.From.Add(MailboxAddress.Parse(selected.Address));
+        if (!InternetAddressList.TryParse(to, out var recipients) || recipients.Mailboxes.Count() == 0) throw new InvalidOperationException("请输入有效的收件人地址，多个地址用逗号分隔。");
+        message.To.AddRange(recipients);
+        if (!string.IsNullOrWhiteSpace(cc))
+        {
+            if (!InternetAddressList.TryParse(cc, out var copies) || copies.Mailboxes.Count() == 0) throw new InvalidOperationException("请输入有效的抄送地址，多个地址用逗号分隔。");
+            message.Cc.AddRange(copies);
+        }
+        message.Subject = subject;
+        message.Body = new BodyBuilder { HtmlBody = html, TextBody = text }.ToMessageBody();
+        using var client = new MailKit.Net.Smtp.SmtpClient { Timeout = 30000 };
+        await client.ConnectAsync(selected.SmtpHost, selected.SmtpPort, selected.SmtpStartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.SslOnConnect, token);
+        await client.AuthenticateAsync(selected.UserName, password, token);
+        await client.SendAsync(message, token);
+        try { await client.DisconnectAsync(true, token); } catch (Exception) { /* The server already accepted the message. */ }
+    }
     private static async Task ConnectAsync(ImapClient client, MailAccount a, string secret, System.Threading.CancellationToken cancellationToken = default)
     {
         client.Timeout = 30000;

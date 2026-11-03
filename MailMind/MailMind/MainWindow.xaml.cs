@@ -164,12 +164,30 @@ public sealed partial class MainWindow : Window
         FolderList.Children.Clear(); folderButtons.Clear();
         foreach (var entry in System.Linq.Enumerable.OrderBy(folders, f => f.Name == "收件箱" ? 0 : 1))
         {
-            var button = new Button { Content = entry.Name, IsEnabled = entry.Selectable, Margin = new Thickness(Math.Min(entry.Depth, 5) * 12, 0, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch, Style = (Style)((FrameworkElement)Content).Resources["SidebarButtonStyle"] };
+            object content = entry.Name;
+            if (entry.Depth == 0)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+                row.Children.Add(new FontIcon { Glyph = FolderGlyph(entry.Name), FontSize = 16 });
+                row.Children.Add(new TextBlock { Text = entry.Name, VerticalAlignment = VerticalAlignment.Center });
+                content = row;
+            }
+            var button = new Button { Content = content, Tag = entry.Name, IsEnabled = entry.Selectable, Margin = new Thickness(Math.Min(entry.Depth, 5) * 12, 0, 0, 0), HorizontalAlignment = HorizontalAlignment.Stretch, Style = (Style)((FrameworkElement)Content).Resources["SidebarButtonStyle"] };
             button.Click += async (_, _) => await OpenFolderAsync(entry.Path);
             FolderList.Children.Add(button); folderButtons[entry.Path] = button;
         }
         UpdateFolderSelection(folder);
     }
+    private static string FolderGlyph(string name) => name.ToLowerInvariant() switch
+    {
+        "收件箱" or "inbox" => "\uE715",
+        "已发送" or "sent" or "sent items" => "\uE724",
+        "草稿箱" or "草稿" or "drafts" => "\uE8A5",
+        "已删除" or "trash" or "deleted items" => "\uE74D",
+        "归档" or "archive" => "\uE7B8",
+        "垃圾邮件" or "junk" or "spam" => "\uE7BA",
+        _ => "\uE8B7"
+    };
     private async Task LoadFoldersAsync()
     {
         var cached = mail.CachedFolders();
@@ -199,7 +217,7 @@ public sealed partial class MainWindow : Window
         if (loading) return;
         searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear();
         AiSearchStatusPanel.Visibility = Visibility.Collapsed;
-        loading = true; pageLoadFailed = false; folder = name; UpdateFolderSelection(name); FolderTitle.Text = folderButtons.TryGetValue(name, out var selectedFolder) ? selectedFolder.Content.ToString() : name; messages.Clear(); offset = total = 0;
+        loading = true; pageLoadFailed = false; folder = name; UpdateFolderSelection(name); FolderTitle.Text = folderButtons.TryGetValue(name, out var selectedFolder) ? (string)selectedFolder.Tag : name; messages.Clear(); offset = total = 0;
         ListEmptyText.Visibility = Visibility.Collapsed;
         if (mail.Account == null) { ListStatus.Text = "请先配置邮箱"; loading = false; return; }
         try
@@ -541,18 +559,137 @@ public sealed partial class MainWindow : Window
         ApplySearch();
     }
     private async void Refresh_Click(object sender, RoutedEventArgs e) { if (mail.Account != null) await LoadFoldersAsync(); }
-    private void Compose_Click(object sender, RoutedEventArgs e) { systemPreview?.Close(); previewAttachment = null; PreviewWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Collapsed; ReadingToolbar.Visibility = Visibility.Collapsed; ComposeWorkspace.Visibility = Visibility.Visible; }
+    private bool composeReady, sending;
+    private int sendStatusVersion;
+    private async void Compose_Click(object sender, RoutedEventArgs e)
+    {
+        if (sending) return;
+        systemPreview?.Close(); previewAttachment = null; PreviewWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Collapsed; ReadingToolbar.Visibility = Visibility.Collapsed;
+        FromBox.Items.Clear(); if (mail.Account != null) { FromBox.Items.Add(mail.Account.Address); FromBox.SelectedIndex = 0; }
+        ComposeWorkspace.Visibility = Visibility.Visible;
+        if (!composeReady)
+        {
+            try
+            {
+                await BodyBox.EnsureCoreWebView2Async();
+                BodyBox.NavigateToString("<!doctype html><html><head><meta charset='utf-8'><style>body{font:16px 'Microsoft YaHei',sans-serif;line-height:1.6;margin:14px;outline:none}table{border-collapse:collapse}td,th{border:1px solid #888;min-width:80px;padding:6px}</style></head><body contenteditable='true'></body></html>");
+                composeReady = true;
+            }
+            catch (Exception ex) { await ShowNotice("无法打开正文编辑器", ex.Message); }
+        }
+    }
+    private async Task<string> EditorValueAsync(string expression)
+    {
+        if (!composeReady) throw new InvalidOperationException("正文编辑器尚未准备好。");
+        return System.Text.Json.JsonSerializer.Deserialize<string>(await BodyBox.CoreWebView2.ExecuteScriptAsync(expression)) ?? "";
+    }
+    private async Task EditorCommandAsync(string command, string? value = null)
+    {
+        if (!composeReady) return;
+        await BodyBox.CoreWebView2.ExecuteScriptAsync($"document.execCommand({System.Text.Json.JsonSerializer.Serialize(command)}, false, {System.Text.Json.JsonSerializer.Serialize(value)}); document.body.focus();");
+    }
     private async void CloseCompose_Click(object sender, RoutedEventArgs e)
     {
-        if (!string.IsNullOrWhiteSpace(ToBox.Text + SubjectBox.Text + BodyBox.Text))
+        if (sending) return;
+        string body = composeReady ? await EditorValueAsync("document.body.innerText") : "";
+        string html = composeReady ? await EditorValueAsync("document.body.innerHTML") : "";
+        if (!string.IsNullOrWhiteSpace(ToBox.Text + CcBox.Text + SubjectBox.Text + body) || html.Contains("<table", StringComparison.OrdinalIgnoreCase))
         {
             var dialog = new ContentDialog { XamlRoot = ComposeWorkspace.XamlRoot, Title = "关闭写信？", Content = "邮件内容尚未保存。关闭后内容会丢失。", PrimaryButtonText = "继续编辑", CloseButtonText = "丢弃" };
             if (await dialog.ShowAsync() == ContentDialogResult.Primary) return;
         }
-        ToBox.Text = SubjectBox.Text = BodyBox.Text = ""; ComposeWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Visible;
+        await ClearComposeAsync();
     }
-    private async void Send_Click(object sender, RoutedEventArgs e) => await ShowNotice("尚不能发送", "SMTP 发送功能尚未实现，当前内容不会发送。");
-    private async void Settings_Click(object sender, RoutedEventArgs e)
+    private async Task ClearComposeAsync(bool closeWorkspace = true)
+    {
+        ToBox.Text = CcBox.Text = SubjectBox.Text = "";
+        if (composeReady) await BodyBox.CoreWebView2.ExecuteScriptAsync("document.body.innerHTML = ''; ");
+        if (closeWorkspace) { ComposeWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Visible; }
+    }
+    private async void FormatBold_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("bold");
+    private async void FontBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox box && box.SelectedItem is ComboBoxItem item && item.Tag is string font) await EditorCommandAsync("fontName", font);
+    }
+    private async void FontSizeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ComboBox box && box.SelectedItem is ComboBoxItem item && item.Tag is string size) await EditorCommandAsync("fontSize", size);
+    }
+    private async void FormatItalic_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("italic");
+    private async void FormatUnderline_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("underline");
+    private async void FormatBullet_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("insertUnorderedList");
+    private async void FormatNumber_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("insertOrderedList");
+    private async void FormatLeft_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("justifyLeft");
+    private async void FormatCenter_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("justifyCenter");
+    private async void FormatRight_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("justifyRight");
+    private void InsertTable_Click(object sender, RoutedEventArgs e)
+    {
+        var flyout = new Flyout();
+        var label = new TextBlock { Text = "选择表格大小（最多 10 × 10）", Margin = new Thickness(0, 0, 0, 8) };
+        var grid = new Grid();
+        for (int i = 0; i < 10; i++) { grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); }
+        var cells = new Button[10, 10];
+        void Highlight(int rows, int columns)
+        {
+            label.Text = $"{columns} 列 × {rows} 行";
+            for (int r = 0; r < 10; r++) for (int c = 0; c < 10; c++)
+                cells[r, c].Background = new SolidColorBrush(r < rows && c < columns ? Windows.UI.Color.FromArgb(255, 135, 180, 245) : Windows.UI.Color.FromArgb(255, 235, 239, 245));
+        }
+        for (int r = 0; r < 10; r++) for (int c = 0; c < 10; c++)
+        {
+            int rows = r + 1, columns = c + 1;
+            var cell = new Button { Width = 22, Height = 22, MinWidth = 0, MinHeight = 0, Padding = new Thickness(0), Margin = new Thickness(1), Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 235, 239, 245)) };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(cell, $"{columns} 列 {rows} 行");
+            cell.PointerEntered += (_, _) => Highlight(rows, columns);
+            cell.GotFocus += (_, _) => Highlight(rows, columns);
+            cell.Click += async (_, _) =>
+            {
+                flyout.Hide();
+                var html = new System.Text.StringBuilder("<table style='border-collapse:collapse'><tbody>");
+                for (int row = 0; row < rows; row++) { html.Append("<tr>"); for (int col = 0; col < columns; col++) html.Append("<td style='border:1px solid #888;padding:6px;min-width:80px'>&nbsp;</td>"); html.Append("</tr>"); }
+                html.Append("</tbody></table><p><br></p>");
+                await EditorCommandAsync("insertHTML", html.ToString());
+            };
+            cells[r, c] = cell; Grid.SetRow(cell, r); Grid.SetColumn(cell, c); grid.Children.Add(cell);
+        }
+        flyout.Content = new StackPanel { Children = { label, grid } };
+        flyout.ShowAt(TableButton);
+    }
+    private async void ComposeAttachment_Click(object sender, RoutedEventArgs e) => await ShowNotice("添加附件", "附件功能尚未接入。");
+    private async void ComposeAi_Click(object sender, RoutedEventArgs e) => await ShowNotice("AI 帮我写", "AI 写作功能尚未接入。");
+    private async void Send_Click(object sender, RoutedEventArgs e)
+    {
+        if (sending) return;
+        sending = true;
+        int statusVersion = ++sendStatusVersion;
+        ComposeWorkspace.Visibility = Visibility.Collapsed;
+        EmptyWorkspace.Visibility = Visibility.Visible;
+        SendStatusText.Text = "邮件发送中";
+        SendResultIcon.Visibility = Visibility.Collapsed;
+        SendProgress.IsActive = true; SendProgress.Visibility = Visibility.Visible;
+        SendStatusBanner.Visibility = Visibility.Visible;
+        bool accepted = false;
+        try
+        {
+            string html = await EditorValueAsync("document.body.innerHTML");
+            string text = await EditorValueAsync("document.body.innerText");
+            await mail.SendAsync(FromBox.SelectedItem as string ?? "", ToBox.Text, CcBox.Text, SubjectBox.Text, "<!doctype html><html><body>" + html + "</body></html>", text, windowLifetime.Token);
+            accepted = true;
+            await ClearComposeAsync(false);
+            SendStatusText.Text = "邮件发送成功";
+        }
+        catch (Exception ex) { if (!closing) SendStatusText.Text = accepted ? "邮件已发送，但清理编辑区失败，请勿重复发送。" : "发送失败：" + ex.Message + "。点击写邮件可继续编辑。"; }
+        finally
+        {
+            SendProgress.IsActive = false; SendProgress.Visibility = Visibility.Collapsed;
+            SendResultIcon.Glyph = accepted ? "\uE73E" : "\uE711";
+            SendResultIcon.Foreground = new SolidColorBrush(accepted ? Microsoft.UI.Colors.ForestGreen : Microsoft.UI.Colors.Firebrick);
+            SendResultIcon.Visibility = Visibility.Visible;
+            sending = false;
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            if (!closing && statusVersion == sendStatusVersion) SendStatusBanner.Visibility = Visibility.Collapsed;
+        }
+    }    private async void Settings_Click(object sender, RoutedEventArgs e)
     {
         var a = mail.Account;
         var address = new TextBox { Header = "邮箱地址", Text = a?.Address ?? "", PlaceholderText = "name@example.com" };
@@ -571,7 +708,7 @@ public sealed partial class MainWindow : Window
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Firebrick) };
         var panel = new StackPanel { Spacing = 10, Children = {
             new TextBlock { Text = "收发服务器", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
-            new TextBlock { Text = "配置邮箱账户及服务器。保存时测试 IMAP 连接；SMTP 发送功能尚未接入。", TextWrapping = TextWrapping.Wrap },
+            new TextBlock { Text = "配置邮箱账户及服务器。保存时测试 IMAP 连接；发送邮件时使用 SMTP 设置。", TextWrapping = TextWrapping.Wrap },
             address, user, secret,
             new TextBlock { Text = "接收邮件 · IMAP", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 0) },
             host, port, ssl,
