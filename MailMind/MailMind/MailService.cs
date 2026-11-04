@@ -67,6 +67,11 @@ public record ReplyDraft(string To, string Cc, string Subject, string Text, stri
 public record MailAttachment(string Name, string ContentType, byte[] Data)
 {
     public string SizeLabel => Data.Length < 1024 ? $"{Data.Length} B" : Data.Length < 1024 * 1024 ? $"{Data.Length / 1024.0:F1} KB" : $"{Data.Length / (1024.0 * 1024):F1} MB";
+    public bool IsImage => Path.GetExtension(Name).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp";
+    public Microsoft.UI.Xaml.Visibility ImageIconVisibility => IsImage ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+    public Microsoft.UI.Xaml.Visibility TypeLabelVisibility => IsImage ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+    public string TypeLabel => Path.GetExtension(Name).ToLowerInvariant() switch { ".doc" or ".docx" => "W", ".xls" or ".xlsx" => "X", ".ppt" or ".pptx" => "P", ".pdf" => "PDF", ".zip" or ".rar" or ".7z" => "ZIP", _ => "文件" };
+    public Microsoft.UI.Xaml.Media.Brush TypeBrush => new Microsoft.UI.Xaml.Media.SolidColorBrush(Path.GetExtension(Name).ToLowerInvariant() switch { ".doc" or ".docx" => Windows.UI.Color.FromArgb(255, 43, 87, 154), ".xls" or ".xlsx" => Windows.UI.Color.FromArgb(255, 24, 120, 70), ".ppt" or ".pptx" => Windows.UI.Color.FromArgb(255, 196, 72, 44), ".pdf" => Windows.UI.Color.FromArgb(255, 190, 48, 48), _ => Windows.UI.Color.FromArgb(255, 97, 112, 133) });
 }
 
 public sealed class MailService
@@ -313,6 +318,17 @@ public sealed class MailService
         if (!subject.StartsWith("Re:", StringComparison.OrdinalIgnoreCase)) subject = "Re: " + subject;
         var text = original.TextBody ?? (original.HtmlBody != null ? HtmlTextExtractor.Extract(original.HtmlBody) : "");
         return new(to.ToString(), cc.ToString(), subject, text, original.From.ToString(), original.Date.ToLocalTime().ToString("g"), original.MessageId, original.References.ToArray());
+    }
+    public async Task<(string To, string Cc)> GetRecipientsAsync(MailItem item)
+    {
+        if (account == null || account.Address != item.Account || string.IsNullOrEmpty(password)) throw new InvalidOperationException("无法连接邮件账户获取收件人。");
+        using var client = new ImapClient();
+        await ConnectAsync(client, account, password);
+        var selectedFolder = await OpenFolderAsync(client, item.Folder);
+        if (selectedFolder.UidValidity != item.Validity) throw new InvalidOperationException("服务器目录已重建，请重新打开目录。");
+        var summaries = await selectedFolder.FetchAsync(new[] { new UniqueId(item.Uid) }, MessageSummaryItems.Envelope);
+        var envelope = summaries.FirstOrDefault()?.Envelope;
+        return (envelope?.To?.ToString() ?? "", envelope?.Cc?.ToString() ?? "");
     }
     public async Task<MailBody> GetBodyAsync(uint uid)
     {

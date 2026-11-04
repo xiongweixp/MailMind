@@ -326,8 +326,14 @@ public sealed partial class MainWindow : Window
         displayedHtml = null;
         EmptyWorkspace.Visibility = Visibility.Collapsed; PreviewWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Visible; ReadingToolbar.Visibility = Visibility.Visible;
         systemPreview?.Close(); previewAttachment = null; AttachmentPanel.Visibility = Visibility.Collapsed; AttachmentList.ItemsSource = null;
-        ReadSubject.Text = item.Subject; ReadSender.Text = item.Sender + "  ·  " + item.Date; ReadBody.Text = "正在加载正文…"; HtmlView.Visibility = Visibility.Collapsed; PlainScroll.Visibility = Visibility.Visible;
+        ReadSubject.Text = item.Subject; ReadSender.Text = "发件人：" + item.Sender; ReadDate.Text = "时间：" + item.Date; ReadDetailSubject.Text = "主题：" + item.Subject; ReadTo.Text = "收件人：正在加载…"; ReadCc.Text = "抄送：正在加载…"; ReadCc.Visibility = ReadCcSummary.Visibility = Visibility.Visible; ReadToSummary.Text = ReadTo.Text; ReadCcSummary.Text = ReadCc.Text; ReadDetailsPanel.Visibility = Visibility.Collapsed; ReadDetailsButton.Content = "详情"; ReadBody.Text = "正在加载正文…"; HtmlView.Visibility = Visibility.Collapsed; PlainScroll.Visibility = Visibility.Visible;
+        if (MimeKit.InternetAddressList.TryParse(item.Sender, out var senders) && senders.Count == 1 && senders[0] is MimeKit.MailboxAddress mailbox && !string.IsNullOrWhiteSpace(mailbox.Name))
+        {
+            ReadSenderName.Text = mailbox.Name; ReadSenderAddress.Text = "  " + mailbox.Address;
+        }
+        else { ReadSenderName.Text = item.DisplaySender; ReadSenderAddress.Text = ""; }
         if (item.IsSeen != true) _ = MarkSeenAsync(item);
+        _ = LoadRecipientsAsync(item);
         try { var body = await mail.GetBodyAsync(item.Uid); if (!closing && ReferenceEquals(MailList.SelectedItem, item)) { if (body.IsHtml) await ShowHtmlAsync(body.Content, item); else ReadBody.Text = body.Content; } }
         catch (Exception ex) { if (!closing && ReferenceEquals(MailList.SelectedItem, item)) ReadBody.Text = "加载正文失败：" + ex.Message; }
         try
@@ -340,16 +346,44 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex) { if (!closing && ReferenceEquals(MailList.SelectedItem, item)) { AttachmentHeading.Text = "附件加载失败：" + ex.Message; AttachmentPanel.Visibility = Visibility.Visible; } }
     }
+    private async Task LoadRecipientsAsync(MailItem item)
+    {
+        try
+        {
+            var (to, cc) = await mail.GetRecipientsAsync(item);
+            if (closing || !ReferenceEquals(MailList.SelectedItem, item)) return;
+            ReadTo.Text = "收件人：" + (string.IsNullOrWhiteSpace(to) ? "未提供" : to);
+            ReadCc.Text = "抄送：" + cc;
+            ReadCc.Visibility = ReadCcSummary.Visibility = string.IsNullOrWhiteSpace(cc) ? Visibility.Collapsed : Visibility.Visible;
+            ReadToSummary.Text = ReadTo.Text; ReadCcSummary.Text = ReadCc.Text;
+        }
+        catch { if (!closing && ReferenceEquals(MailList.SelectedItem, item)) { ReadTo.Text = ReadToSummary.Text = "收件人：无法加载"; ReadCc.Text = ReadCcSummary.Text = "抄送：无法加载"; } }
+    }
+    private void ReadDetails_Click(object sender, RoutedEventArgs e)
+    {
+        var show = ReadDetailsPanel.Visibility != Visibility.Visible;
+        ReadDetailsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        ReadDetailsButton.Content = show ? "收起" : "详情";
+    }
     private async void Attachment_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: MailAttachment attachment }) return;
         previewAttachment = attachment; ReadingWorkspace.Visibility = Visibility.Collapsed; ReadingToolbar.Visibility = Visibility.Collapsed; PreviewWorkspace.Visibility = Visibility.Visible;
+        systemPreview?.Close(); PreviewImage.Source = null; PreviewImage.Visibility = Visibility.Collapsed;
         PreviewName.Text = attachment.Name; PreviewSize.Text = attachment.SizeLabel; PreviewMessage.Text = "正在加载预览…";
         PreviewProgress.Visibility = Visibility.Visible; PreviewProgress.IsActive = true;
         try
         {
             await Task.Yield();
             if (!ReferenceEquals(previewAttachment, attachment)) return;
+            if (attachment.IsImage)
+            {
+                using var stream = new MemoryStream(attachment.Data).AsRandomAccessStream();
+                var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+                await bitmap.SetSourceAsync(stream);
+                if (ReferenceEquals(previewAttachment, attachment)) { PreviewImage.Source = bitmap; PreviewImage.Visibility = Visibility.Visible; PreviewMessage.Text = ""; }
+                return;
+            }
             PreviewWorkspace.UpdateLayout();
             systemPreview ??= new SystemPreviewHost();
             var bounds = PreviewBounds();
@@ -377,16 +411,16 @@ public sealed partial class MainWindow : Window
     }
     private void UpdatePreviewBounds()
     {
-        if (previewAttachment == null || systemPreview == null || PreviewWorkspace.Visibility != Visibility.Visible) return;
+        if (previewAttachment == null || previewAttachment.IsImage || systemPreview == null || PreviewWorkspace.Visibility != Visibility.Visible) return;
         var bounds = PreviewBounds(); systemPreview.Resize(bounds.x, bounds.y, bounds.width, bounds.height);
     }
     private void BackFromPreview_Click(object sender, RoutedEventArgs e)
     {
-        previewAttachment = null; systemPreview?.Close(); PreviewWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Visible; ReadingToolbar.Visibility = Visibility.Visible;
+        previewAttachment = null; systemPreview?.Close(); PreviewImage.Source = null; PreviewImage.Visibility = Visibility.Collapsed; PreviewWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Visible; ReadingToolbar.Visibility = Visibility.Visible;
     }
     private async void SaveAttachment_Click(object sender, RoutedEventArgs e)
     {
-        var attachment = previewAttachment; if (attachment == null) return;
+        var attachment = (sender as MenuFlyoutItem)?.Tag as MailAttachment ?? previewAttachment; if (attachment == null) return;
         try
         {
             var picker = new Windows.Storage.Pickers.FileSavePicker();
@@ -399,6 +433,31 @@ public sealed partial class MainWindow : Window
             if (file != null) await Windows.Storage.FileIO.WriteBytesAsync(file, attachment.Data);
         }
         catch (Exception ex) { await ShowNotice("保存附件失败", ex.Message); }
+    }
+    private void AttachmentMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: MailAttachment attachment } button) return;
+        var menu = new MenuFlyout();
+        var open = new MenuFlyoutItem { Text = "打开", Tag = attachment };
+        var save = new MenuFlyoutItem { Text = "另存为", Tag = attachment };
+        open.Click += OpenAttachment_Click; save.Click += SaveAttachment_Click;
+        menu.Items.Add(open); menu.Items.Add(save); menu.ShowAt(button);
+    }
+    private async void OpenAttachment_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem { Tag: MailAttachment attachment }) return;
+        try
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "MailMind", "attachments", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var name = Path.GetFileName(attachment.Name.Replace('\\', '/'));
+            if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) name = "attachment.bin";
+            var path = Path.Combine(directory, name);
+            await File.WriteAllBytesAsync(path, attachment.Data);
+            var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(path);
+            if (!await Windows.System.Launcher.LaunchFileAsync(file)) await ShowNotice("打开附件失败", "没有可用于打开此文件的默认应用。");
+        }
+        catch (Exception ex) { await ShowNotice("打开附件失败", ex.Message); }
     }
     private async Task MarkSeenAsync(MailItem item)
     {
@@ -443,12 +502,12 @@ public sealed partial class MainWindow : Window
         bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
         string colors = dark
             ? "<style>html,body{background:#202020!important;color:#f2f3f5!important}body *{background-color:transparent!important;color:#f2f3f5!important}body a,body a *{color:#91baff!important}</style>"
-            : "";
+            : "<style>html,body{background:#f7f7f7!important}</style>";
         string thumb = dark ? "#a8a8a8" : "#8a8a8a";
         string thumbHover = dark ? "#c6c6c6" : "#606060";
         string scrollbars = $"<style>::-webkit-scrollbar{{width:12px;height:12px}}::-webkit-scrollbar-track{{background:transparent}}::-webkit-scrollbar-thumb{{background:{thumb};border:4px solid transparent;border-radius:8px;background-clip:padding-box}}::-webkit-scrollbar-thumb:hover{{background-color:{thumbHover};border-width:3px}}::-webkit-scrollbar-corner{{background:transparent}}</style>";
         // The sandbox prevents email content from running scripts or navigating the app.
-        var document = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'\"><style>html,body{margin:0;height:100%;overflow:hidden;background:" + (dark ? "#202020" : "#fff") + "}iframe{display:block;border:0;width:100%;height:100%}</style><iframe sandbox srcdoc=\"" + System.Net.WebUtility.HtmlEncode("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'\">" + html + colors + scrollbars) + "\"></iframe>";
+        var document = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'\"><style>html,body{margin:0;height:100%;overflow:hidden;background:" + (dark ? "#202020" : "#f7f7f7") + "}iframe{display:block;border:0;width:100%;height:100%}</style><iframe sandbox srcdoc=\"" + System.Net.WebUtility.HtmlEncode("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'\">" + html + colors + scrollbars) + "\"></iframe>";
         var documentUri = "http://mailmind.invalid/" + Guid.NewGuid().ToString("N");
         htmlDocuments.Clear();
         htmlDocuments[documentUri] = document;
