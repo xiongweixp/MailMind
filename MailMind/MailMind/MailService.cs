@@ -68,10 +68,31 @@ public record MailAttachment(string Name, string ContentType, byte[] Data)
 {
     public string SizeLabel => Data.Length < 1024 ? $"{Data.Length} B" : Data.Length < 1024 * 1024 ? $"{Data.Length / 1024.0:F1} KB" : $"{Data.Length / (1024.0 * 1024):F1} MB";
     public bool IsImage => Path.GetExtension(Name).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp";
-    public Microsoft.UI.Xaml.Visibility ImageIconVisibility => IsImage ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
-    public Microsoft.UI.Xaml.Visibility TypeLabelVisibility => IsImage ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
-    public string TypeLabel => Path.GetExtension(Name).ToLowerInvariant() switch { ".doc" or ".docx" => "W", ".xls" or ".xlsx" => "X", ".ppt" or ".pptx" => "P", ".pdf" => "PDF", ".zip" or ".rar" or ".7z" => "ZIP", _ => "文件" };
-    public Microsoft.UI.Xaml.Media.Brush TypeBrush => new Microsoft.UI.Xaml.Media.SolidColorBrush(Path.GetExtension(Name).ToLowerInvariant() switch { ".doc" or ".docx" => Windows.UI.Color.FromArgb(255, 43, 87, 154), ".xls" or ".xlsx" => Windows.UI.Color.FromArgb(255, 24, 120, 70), ".ppt" or ".pptx" => Windows.UI.Color.FromArgb(255, 196, 72, 44), ".pdf" => Windows.UI.Color.FromArgb(255, 190, 48, 48), _ => Windows.UI.Color.FromArgb(255, 97, 112, 133) });
+    private string Kind => Path.GetExtension(Name).ToLowerInvariant() switch
+    {
+        ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp" or ".heic" or ".svg" or ".tif" or ".tiff" => "image",
+        ".mp4" or ".mov" or ".avi" or ".mkv" or ".wmv" or ".webm" or ".m4v" => "video",
+        ".doc" or ".docx" or ".docm" or ".rtf" => "word",
+        ".xls" or ".xlsx" or ".xlsm" or ".csv" => "excel",
+        ".ppt" or ".pptx" or ".pptm" => "powerpoint",
+        ".pdf" => "pdf",
+        ".txt" or ".md" or ".markdown" => "text",
+        ".cs" or ".c" or ".cpp" or ".h" or ".hpp" or ".py" or ".js" or ".jsx" or ".ts" or ".tsx" or ".java" or ".go" or ".rs" or ".html" or ".css" or ".json" or ".xml" or ".xaml" or ".sql" or ".sh" or ".ps1" => "code",
+        ".zip" or ".rar" or ".7z" or ".tar" or ".gz" or ".bz2" or ".xz" => "archive",
+        _ => "file"
+    };
+    public string TypeGlyph => Kind == "video" ? "\uE714" : "\uEB9F";
+    public Microsoft.UI.Xaml.Visibility ImageIconVisibility => Kind is "image" or "video" ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+    public Microsoft.UI.Xaml.Visibility TypeLabelVisibility => Kind is "image" or "video" ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+    public string TypeLabel => Kind switch { "word" => "W", "excel" => "X", "powerpoint" => "P", "pdf" => "PDF", "text" => "TXT", "code" => "</>", "archive" => "ZIP", _ => "文件" };
+    public Microsoft.UI.Xaml.Media.Brush TypeBrush => new Microsoft.UI.Xaml.Media.SolidColorBrush(Kind switch
+    {
+        "image" => Windows.UI.Color.FromArgb(255, 70, 135, 160), "video" => Windows.UI.Color.FromArgb(255, 148, 90, 140),
+        "word" => Windows.UI.Color.FromArgb(255, 43, 87, 154), "excel" => Windows.UI.Color.FromArgb(255, 24, 120, 70),
+        "powerpoint" => Windows.UI.Color.FromArgb(255, 196, 72, 44), "pdf" => Windows.UI.Color.FromArgb(255, 190, 48, 48),
+        "text" => Windows.UI.Color.FromArgb(255, 90, 123, 151), "code" => Windows.UI.Color.FromArgb(255, 64, 110, 100),
+        "archive" => Windows.UI.Color.FromArgb(255, 167, 119, 47), _ => Windows.UI.Color.FromArgb(255, 97, 112, 133)
+    });
 }
 
 public sealed class MailService
@@ -127,7 +148,7 @@ public sealed class MailService
         File.WriteAllText(ConfigPath, JsonSerializer.Serialize(candidate));
         account = candidate; password = secret; ids.Clear(); folderName = null;
     }
-    public async Task SendAsync(string from, string to, string cc, string subject, string html, string text, System.Threading.CancellationToken token, ReplyDraft? reply = null)
+    public async Task SendAsync(string from, string to, string cc, string subject, string html, string text, System.Threading.CancellationToken token, ReplyDraft? reply = null, System.Collections.Generic.IReadOnlyList<MailAttachment>? attachments = null)
     {
         var selected = account ?? throw new InvalidOperationException("请先配置邮箱。");
         if (from != selected.Address || string.IsNullOrEmpty(password)) throw new InvalidOperationException("邮箱账户或授权码不可用，请重新配置邮箱。");
@@ -148,7 +169,9 @@ public sealed class MailService
             foreach (var reference in reply.References) message.References.Add(reference);
             if (!message.References.Contains(messageId)) message.References.Add(messageId);
         }
-        message.Body = new BodyBuilder { HtmlBody = html, TextBody = text }.ToMessageBody();
+        var builder = new BodyBuilder { HtmlBody = html, TextBody = text };
+        if (attachments != null) foreach (var attachment in attachments) builder.Attachments.Add(attachment.Name, attachment.Data);
+        message.Body = builder.ToMessageBody();
         using var client = new MailKit.Net.Smtp.SmtpClient { Timeout = 30000 };
         await client.ConnectAsync(selected.SmtpHost, selected.SmtpPort, selected.SmtpStartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.SslOnConnect, token);
         await client.AuthenticateAsync(selected.UserName, password, token);

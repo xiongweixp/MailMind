@@ -53,6 +53,7 @@ public sealed partial class MainWindow : Window
     private uint? toolbarDragPointer;
     private NativePoint toolbarDragStart;
     private Windows.Graphics.PointInt32 toolbarWindowStart;
+    private readonly ObservableCollection<MailAttachment> composeAttachments = new();
     private readonly ObservableCollection<MailItem> messages = new();
     private readonly ObservableCollection<MailDateGroup> dateGroups = new();
     private readonly CollectionViewSource groupedMessages = new() { IsSourceGrouped = true };
@@ -73,6 +74,12 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ComposeAttachmentList.ItemsSource = composeAttachments;
+        composeAttachments.CollectionChanged += (_, _) =>
+        {
+            ComposeAttachmentPanel.Visibility = composeAttachments.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            ComposeAttachmentHeading.Text = $"附件（{composeAttachments.Count}）";
+        };
         mailSyncTimer.Tick += async (_, _) => await CheckForNewMailAsync();
         mailSyncTimer.Start();
         LoadColumnWidths();
@@ -943,7 +950,7 @@ public sealed partial class MainWindow : Window
         if (ComposeWorkspace.Visibility == Visibility.Visible)
         {
             string body = composeReady ? await EditorValueAsync("document.body.innerHTML") : "";
-            if (!string.IsNullOrWhiteSpace(ToBox.Text + CcBox.Text + SubjectBox.Text + body))
+            if (!string.IsNullOrWhiteSpace(ToBox.Text + CcBox.Text + SubjectBox.Text + body) || composeAttachments.Count > 0)
                 throw new InvalidOperationException("写邮件界面已有内容，请先处理当前草稿，再让助手创建新草稿。");
         }
         await OpenComposeAsync();
@@ -966,6 +973,7 @@ public sealed partial class MainWindow : Window
                 void OnNavigationCompleted(Microsoft.UI.Xaml.Controls.WebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs args)
                 {
                     BodyBox.NavigationCompleted -= OnNavigationCompleted;
+                BodyBox.CoreWebView2.WebMessageReceived += ComposeWebMessageReceived;
                     if (args.IsSuccess) navigation.TrySetResult(true);
                     else navigation.TrySetException(new InvalidOperationException("正文编辑器加载失败。"));
                 }
@@ -976,6 +984,19 @@ public sealed partial class MainWindow : Window
                 await UpdateComposeThemeAsync();
             }
             catch (Exception ex) { await ShowNotice("无法打开正文编辑器", ex.Message); }
+                await BodyBox.CoreWebView2.ExecuteScriptAsync("""
+                    document.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+                    document.addEventListener('drop', async e => {
+                        if (!e.dataTransfer.files.length) return;
+                        e.preventDefault();
+                        for (const file of Array.from(e.dataTransfer.files)) {
+                            try {
+                                const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(',')[1]); reader.onerror = () => reject(); reader.readAsDataURL(file); });
+                                chrome.webview.postMessage({ type: 'attachment', name: file.name, data });
+                            } catch { chrome.webview.postMessage({ type: 'attachmentError', name: file.name }); }
+                        }
+                    });
+                    """);
         }
     }
     private async void Reply_Click(object sender, RoutedEventArgs e) => await StartReplyAsync(false);
@@ -1018,7 +1039,7 @@ public sealed partial class MainWindow : Window
         if (sending) return;
         string body = composeReady ? await EditorValueAsync("document.body.innerText") : "";
         string html = composeReady ? await EditorValueAsync("document.body.innerHTML") : "";
-        if (!string.IsNullOrWhiteSpace(ToBox.Text + CcBox.Text + SubjectBox.Text + body) || html.Contains("<table", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(ToBox.Text + CcBox.Text + SubjectBox.Text + body) || html.Contains("<table", StringComparison.OrdinalIgnoreCase) || composeAttachments.Count > 0)
         {
             var dialog = new ContentDialog { XamlRoot = ComposeWorkspace.XamlRoot, Title = "关闭写信？", Content = "邮件内容尚未保存。关闭后内容会丢失。", PrimaryButtonText = "继续编辑", CloseButtonText = "丢弃" };
             if (await dialog.ShowAsync() == ContentDialogResult.Primary) return;
@@ -1033,6 +1054,7 @@ public sealed partial class MainWindow : Window
         if (composeReady) await BodyBox.CoreWebView2.ExecuteScriptAsync("document.body.innerHTML = ''; ");
         if (closeWorkspace) { ComposeWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Visible; }
     }
+        composeAttachments.Clear();
     private async void FormatBold_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("bold");
     private async void FontBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -1082,7 +1104,57 @@ public sealed partial class MainWindow : Window
         flyout.Content = new StackPanel { Children = { label, grid } };
         flyout.ShowAt(TableButton);
     }
-    private async void ComposeAttachment_Click(object sender, RoutedEventArgs e) => await ShowNotice("添加附件", "附件功能尚未接入。");
+    private async void ComposeAttachment_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new Windows.Storage.Pickers.FileOpenPicker();
+        picker.FileTypeFilter.Add("*");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        await AddComposeFilesAsync(await picker.PickMultipleFilesAsync());
+    }
+    private void Compose_DragOver(object sender, DragEventArgs e)
+    {
+        if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
+            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+    }
+    private async void Compose_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems)) return;
+        var deferral = e.GetDeferral();
+        try { await AddComposeFilesAsync(await e.DataView.GetStorageItemsAsync()); }
+        catch (Exception ex) { await ShowNotice("添加附件失败", ex.Message); }
+        finally { deferral.Complete(); }
+    }
+    private async Task AddComposeFilesAsync(System.Collections.Generic.IEnumerable<Windows.Storage.IStorageItem> items)
+    {
+        try
+        {
+            foreach (var item in items)
+            {
+                if (item is not Windows.Storage.StorageFile file) continue;
+                var buffer = await Windows.Storage.FileIO.ReadBufferAsync(file);
+                Windows.Security.Cryptography.CryptographicBuffer.CopyToByteArray(buffer, out byte[] data);
+                composeAttachments.Add(new MailAttachment(file.Name, file.ContentType, data));
+            }
+        }
+        catch (Exception ex) { await ShowNotice("添加附件失败", ex.Message); }
+    }
+    private async void ComposeWebMessageReceived(Microsoft.Web.WebView2.Core.CoreWebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        if (ComposeWorkspace.Visibility != Visibility.Visible || sending) return;
+        try
+        {
+            using var message = JsonDocument.Parse(e.WebMessageAsJson);
+            string type = message.RootElement.GetProperty("type").GetString() ?? "";
+            string name = message.RootElement.GetProperty("name").GetString() ?? "附件";
+            if (type == "attachmentError") { await ShowNotice("添加附件失败", $"无法读取文件：{name}"); return; }
+            if (type == "attachment") composeAttachments.Add(new MailAttachment(name, "application/octet-stream", Convert.FromBase64String(message.RootElement.GetProperty("data").GetString() ?? "")));
+        }
+        catch (Exception ex) { await ShowNotice("添加附件失败", ex.Message); }
+    }
+    private void RemoveComposeAttachment_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: MailAttachment attachment }) composeAttachments.Remove(attachment);
+    }
     private async void ComposeAi_Click(object sender, RoutedEventArgs e) => await ShowNotice("AI 帮我写", "AI 写作功能尚未接入。");
     private async void Send_Click(object sender, RoutedEventArgs e)
     {
@@ -1101,7 +1173,7 @@ public sealed partial class MainWindow : Window
         {
             string html = await EditorValueAsync("document.body.innerHTML");
             string text = await EditorValueAsync("document.body.innerText");
-            await mail.SendAsync(FromBox.SelectedItem as string ?? "", ToBox.Text, CcBox.Text, SubjectBox.Text, "<!doctype html><html><body>" + html + "</body></html>", text, windowLifetime.Token, replyDraft);
+            await mail.SendAsync(FromBox.SelectedItem as string ?? "", ToBox.Text, CcBox.Text, SubjectBox.Text, "<!doctype html><html><body>" + html + "</body></html>", text, windowLifetime.Token, replyDraft, composeAttachments);
             accepted = true;
             await ClearComposeAsync(false);
             SendStatusText.Text = "邮件发送成功";
