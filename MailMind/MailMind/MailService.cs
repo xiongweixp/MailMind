@@ -246,6 +246,15 @@ public sealed class MailService
         }
         return ids.Count;
     }
+    public async Task<bool> FolderChangedAsync(string path)
+    {
+        using var client = await ConnectAsync();
+        var folder = await OpenFolderAsync(client, path);
+        if (folder.UidValidity != validity || folder.Count != ids.Count) return true;
+        var found = await folder.SearchAsync(SearchQuery.All);
+        if (found.Count != folder.Count) return true;
+        return !found.Reverse().SequenceEqual(ids);
+    }
     public async IAsyncEnumerable<MailItem?> GetPageAsync(int offset, int count)
     {
         if (folderName == null) yield break;
