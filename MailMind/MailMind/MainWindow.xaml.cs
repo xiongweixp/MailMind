@@ -731,6 +731,10 @@ public sealed partial class MainWindow : Window
         if (!sending && !preparingReply) await OpenComposeAsync();
     }
     private record AgentMessageView(TextBlock Text, Expander Thinking, TextBlock ThinkingText, ScrollViewer ThinkingScroll, ProgressRing Spinner, TextBlock ThinkingLabel);
+    private void AgentMessages_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        DispatcherQueue.TryEnqueue(() => AgentScroll.ChangeView(null, AgentScroll.ScrollableHeight, null, true));
+    }
     private AgentMessageView AddAgentMessage(string label, string text)
     {
         bool assistant = label == "AI 助手";
@@ -969,21 +973,17 @@ public sealed partial class MainWindow : Window
             try
             {
                 await BodyBox.EnsureCoreWebView2Async();
+                BodyBox.CoreWebView2.WebMessageReceived += ComposeWebMessageReceived;
                 var navigation = new TaskCompletionSource<bool>();
                 void OnNavigationCompleted(Microsoft.UI.Xaml.Controls.WebView2 sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs args)
                 {
                     BodyBox.NavigationCompleted -= OnNavigationCompleted;
-                BodyBox.CoreWebView2.WebMessageReceived += ComposeWebMessageReceived;
                     if (args.IsSuccess) navigation.TrySetResult(true);
                     else navigation.TrySetException(new InvalidOperationException("正文编辑器加载失败。"));
                 }
                 BodyBox.NavigationCompleted += OnNavigationCompleted;
                 BodyBox.NavigateToString("<!doctype html><html><head><meta charset='utf-8'><style>body{font:16px 'Microsoft YaHei',sans-serif;line-height:1.6;margin:14px;outline:none}table{border-collapse:collapse}td,th{border:1px solid #888;min-width:80px;padding:6px}</style></head><body contenteditable='true'></body></html>");
                 await navigation.Task;
-                composeReady = true;
-                await UpdateComposeThemeAsync();
-            }
-            catch (Exception ex) { await ShowNotice("无法打开正文编辑器", ex.Message); }
                 await BodyBox.CoreWebView2.ExecuteScriptAsync("""
                     document.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
                     document.addEventListener('drop', async e => {
@@ -997,6 +997,10 @@ public sealed partial class MainWindow : Window
                         }
                     });
                     """);
+                composeReady = true;
+                await UpdateComposeThemeAsync();
+            }
+            catch (Exception ex) { await ShowNotice("无法打开正文编辑器", ex.Message); }
         }
     }
     private async void Reply_Click(object sender, RoutedEventArgs e) => await StartReplyAsync(false);
@@ -1050,11 +1054,11 @@ public sealed partial class MainWindow : Window
     {
         AgentSendConfirmation.Visibility = Visibility.Collapsed;
         replyDraft = null;
+        composeAttachments.Clear();
         ToBox.Text = CcBox.Text = SubjectBox.Text = "";
         if (composeReady) await BodyBox.CoreWebView2.ExecuteScriptAsync("document.body.innerHTML = ''; ");
         if (closeWorkspace) { ComposeWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Visible; }
     }
-        composeAttachments.Clear();
     private async void FormatBold_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("bold");
     private async void FontBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {

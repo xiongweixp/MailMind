@@ -18,6 +18,21 @@ public record AgentResult(string Message, string? Skill, JsonElement Arguments);
 public sealed class MailAgent
 {
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(180) };
+    private static readonly object LogLock = new();
+    private static void LogRequest(object details)
+    {
+        try
+        {
+            string directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailMind");
+            lock (LogLock)
+            {
+                Directory.CreateDirectory(directory);
+                File.AppendAllText(Path.Combine(directory, "agent-diagnostics.log"), JsonSerializer.Serialize(details) + Environment.NewLine);
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
     public static readonly JsonSerializerOptions ReadableJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private static readonly Dictionary<string, string> Skills = new()
     {
@@ -54,8 +69,16 @@ public sealed class MailAgent
     }
     private static async Task<AgentResult> RequestAsync(AiSettings settings, List<AgentMessage> messages, CancellationToken token, Action<string, string>? progress)
     {
+        var started = DateTimeOffset.Now;
+        string? finishReason = null, usage = null, failure = null;
+        int answerLength = 0, thinkingLength = 0, chunks = 0;
+        int? statusCode = null;
+        bool done = false;
+        try
+        {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{settings.Port}/v1/chat/completions") { Content = JsonContent.Create(new { model = settings.ChatModel, messages, temperature = 0.4, stream = true }) };
         using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
+        statusCode = (int)response.StatusCode;
         if (!response.IsSuccessStatusCode) throw new HttpRequestException($"AI 请求失败 ({(int)response.StatusCode}): {await response.Content.ReadAsStringAsync(token)}");
         using var stream = await response.Content.ReadAsStreamAsync(token);
         using var reader = new StreamReader(stream);
@@ -66,22 +89,32 @@ public sealed class MailAgent
         {
             if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
             string data = line[5..].Trim();
-            if (data == "[DONE]") { finished = true; break; }
+            if (data == "[DONE]") { done = true; finished = true; break; }
             if (data.Length == 0) continue;
             using var chunk = JsonDocument.Parse(data);
+            chunks++;
+            if (chunk.RootElement.TryGetProperty("usage", out var tokenUsage) && tokenUsage.ValueKind == JsonValueKind.Object)
+            {
+                var counts = new Dictionary<string, long>();
+                foreach (string key in new[] { "prompt_tokens", "completion_tokens", "total_tokens" })
+                    if (tokenUsage.TryGetProperty(key, out var count) && count.TryGetInt64(out long value)) counts[key] = value;
+                usage = JsonSerializer.Serialize(counts);
+            }
             if (chunk.RootElement.TryGetProperty("error", out var error)) throw new HttpRequestException("AI 流式请求失败：" + error);
             if (!chunk.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0) continue;
             var choice = choices[0];
             if (choice.TryGetProperty("finish_reason", out var finish) && finish.ValueKind == JsonValueKind.String)
             {
-                if (finish.GetString() == "length") throw new InvalidOperationException("模型输出被截断，请重试或增大模型输出长度。");
+                finishReason = finish.GetString();
+                if (finishReason == "length") throw new InvalidOperationException("模型输出被截断，请重试或增大模型输出长度。");
                 finished = true;
             }
             if (!choice.TryGetProperty("delta", out var delta)) continue;
             foreach (string key in new[] { "reasoning_content", "reasoning" })
-                if (delta.TryGetProperty(key, out var reasoning) && reasoning.ValueKind == JsonValueKind.String) { progress?.Invoke("thinking", reasoning.GetString() ?? ""); break; }
+                if (delta.TryGetProperty(key, out var reasoning) && reasoning.ValueKind == JsonValueKind.String) { string value = reasoning.GetString() ?? ""; thinkingLength += value.Length; progress?.Invoke("thinking", value); break; }
             if (!delta.TryGetProperty("content", out var part) || part.ValueKind != JsonValueKind.String) continue;
             answerBuffer.Append(part.GetString());
+            answerLength = answerBuffer.Length;
             string current = answerBuffer.ToString();
             if (current.StartsWith("<think>", StringComparison.Ordinal))
             {
@@ -109,6 +142,18 @@ public sealed class MailAgent
         if (skill != null && !Skills.ContainsKey(skill)) throw new InvalidOperationException("模型请求了不支持的操作。 ");
         JsonElement arguments = root.TryGetProperty("arguments", out var args) ? args.Clone() : default;
         return new AgentResult(message, skill, arguments);
+        }
+        catch (Exception ex)
+        {
+            failure = ex.GetType().Name;
+            throw;
+        }
+        finally
+        {
+            LogRequest(new { time = started, model = settings.ChatModel, messageCount = messages.Count,
+                inputCharacters = System.Linq.Enumerable.Sum(messages, message => (long)message.content.Length),
+                statusCode, chunks, finishReason, done, answerLength, thinkingLength, usage, failure });
+        }
     }
     private static string PartialMessage(string json)
     {
