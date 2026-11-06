@@ -74,6 +74,8 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ContactsView.ComposeRequested += async address => { ContactsView.Visibility = Visibility.Collapsed; UpdateFolderSelection(folder); await OpenComposeAsync(); ToBox.Text = address; };
+        ContactsView.MailRequested += async message => await OpenContactMailAsync(message);
         ComposeAttachmentList.ItemsSource = composeAttachments;
         composeAttachments.CollectionChanged += (_, _) =>
         {
@@ -185,6 +187,37 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { if (!closing && System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item))) { item.Importance = "失败"; ListStatus.Text = "AI 分类失败：" + ex.Message; } }
         finally { decisionQueue.Release(); }
     }
+    private async void Contacts_Click(object sender, RoutedEventArgs e)
+    {
+        if (ComposeWorkspace.Visibility == Visibility.Visible) { await ShowNotice("正在写邮件", "请先关闭写信区，再打开通讯录。"); return; }
+        ContactsView.Visibility = Visibility.Visible; ContactsView.Refresh(); UpdateFolderSelection(folder);
+    }
+    private async Task OpenContactMailAsync(ContactsPane.RecentMail message)
+    {
+        if (!string.Equals(mail.Account?.Address, message.Account, StringComparison.OrdinalIgnoreCase))
+        {
+            await ShowNotice("无法打开邮件", "这封邮件属于其他邮箱，请先切换到对应邮箱。");
+            return;
+        }
+        if (loading) { await ShowNotice("正在加载", "请等待邮件加载完成后重试。"); return; }
+        SearchBox.Text = ""; searchDate = null; SearchCalendar.SelectedDates.Clear();
+        if (AiSearchButton.IsChecked == true) AiSearchButton.IsChecked = false;
+        UpdateDateFilterColor();
+        await OpenFolderAsync(message.Folder);
+        if (folder != message.Folder || closing) return;
+        MailItem? target = null;
+        while (!closing && folder == message.Folder)
+        {
+            target = System.Linq.Enumerable.FirstOrDefault(messages, item => item.Uid == message.Uid && item.Validity == message.Validity);
+            if (target != null || loading || offset >= total || pageLoadFailed) break;
+            int previousOffset = offset;
+            await LoadPageAsync();
+            if (offset <= previousOffset) break;
+        }
+        if (target == null) { await ShowNotice("无法打开邮件", "邮件可能已被删除、移走或尚未加载，请刷新后重试。"); return; }
+        MailList.SelectedItem = target;
+        MailList.ScrollIntoView(target);
+    }
     private void ShowAccount(string address)
     {
         AccountLabel.Text = address;
@@ -196,10 +229,12 @@ public sealed partial class MainWindow : Window
         bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
         foreach (var (path, button) in folderButtons)
         {
-            bool selected = path == name;
+            bool selected = ContactsView.Visibility != Visibility.Visible && path == name;
             button.Background = new SolidColorBrush(selected ? (dark ? Windows.UI.Color.FromArgb(255, 43, 68, 98) : Windows.UI.Color.FromArgb(255, 225, 235, 252)) : Microsoft.UI.Colors.Transparent);
             button.Foreground = new SolidColorBrush(selected ? (dark ? Windows.UI.Color.FromArgb(255, 173, 207, 255) : Windows.UI.Color.FromArgb(255, 27, 82, 181)) : (dark ? Windows.UI.Color.FromArgb(255, 242, 243, 245) : Windows.UI.Color.FromArgb(255, 23, 35, 58)));
         }
+        bool contactsSelected = ContactsView.Visibility == Visibility.Visible;
+        ContactsButton.Background = new SolidColorBrush(contactsSelected ? (dark ? Windows.UI.Color.FromArgb(255, 43, 68, 98) : Windows.UI.Color.FromArgb(255, 225, 235, 252)) : Microsoft.UI.Colors.Transparent);
     }
     private void UpdateThemeColors()
     {
@@ -304,6 +339,7 @@ public sealed partial class MainWindow : Window
     }
     private async Task OpenFolderAsync(string name)
     {
+        ContactsView.Visibility = Visibility.Collapsed;
         if (loading) return;
         searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear();
         AiSearchStatusPanel.Visibility = Visibility.Collapsed;
@@ -728,6 +764,8 @@ public sealed partial class MainWindow : Window
     private int sendStatusVersion;
     private async void Compose_Click(object sender, RoutedEventArgs e)
     {
+        ContactsView.Visibility = Visibility.Collapsed;
+        UpdateFolderSelection(folder);
         if (!sending && !preparingReply) await OpenComposeAsync();
     }
     private record AgentMessageView(TextBlock Text, Expander Thinking, TextBlock ThinkingText, ScrollViewer ThinkingScroll, ProgressRing Spinner, TextBlock ThinkingLabel);
