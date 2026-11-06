@@ -50,6 +50,24 @@ CREATE TABLE IF NOT EXISTS attachments (account TEXT NOT NULL, folder TEXT NOT N
     {
         using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT path,name,depth,selectable FROM folders WHERE account=$a ORDER BY path COLLATE NOCASE"; c.Parameters.AddWithValue("$a",account); using var r=c.ExecuteReader(); var result=new List<MailFolderInfo>(); while(r.Read()) result.Add(new(r.GetString(0),r.GetString(1),r.GetInt32(2),r.GetInt32(3)!=0)); return result;
     }
+    public List<MailItem> SearchAgentMessages(string account, string? folder, string query, string sender, string from, string to, int offset, int limit)
+    {
+        using var db = Open(); using var cmd = db.CreateCommand();
+        cmd.CommandText = @"SELECT m.folder,m.validity,m.uid,m.sender,m.subject,m.date,m.preview,m.is_seen
+FROM messages m JOIN folders f ON f.account=m.account AND f.path=m.folder AND f.validity=m.validity
+WHERE m.account=$account AND ($folder='' OR m.folder=$folder)
+AND ($query='' OR instr(lower(m.sender),lower($query))>0 OR instr(lower(m.subject),lower($query))>0 OR instr(lower(m.preview),lower($query))>0)
+AND ($sender='' OR instr(lower(m.sender),lower($sender))>0)
+AND ($from='' OR substr(m.date,1,10)>=$from) AND ($to='' OR substr(m.date,1,10)<=$to)
+ORDER BY m.date DESC,m.folder,m.uid DESC LIMIT $limit OFFSET $offset";
+        cmd.Parameters.AddWithValue("$account", account); cmd.Parameters.AddWithValue("$folder", folder ?? "");
+        cmd.Parameters.AddWithValue("$query", query); cmd.Parameters.AddWithValue("$sender", sender);
+        cmd.Parameters.AddWithValue("$from", from); cmd.Parameters.AddWithValue("$to", to);
+        cmd.Parameters.AddWithValue("$offset", offset); cmd.Parameters.AddWithValue("$limit", limit);
+        using var rows = cmd.ExecuteReader(); var result = new List<MailItem>();
+        while (rows.Read()) result.Add(new MailItem((uint)rows.GetInt64(2), rows.GetString(3), rows.GetString(4), rows.GetString(5), rows.GetString(6), rows.IsDBNull(7) ? null : rows.GetInt32(7) != 0) { Account = account, Folder = rows.GetString(0), Validity = (uint)rows.GetInt64(1) });
+        return result;
+    }
     public void SetValidity(string account,string folder,uint validity)
     {
         using var db=Open(); using var tx=db.BeginTransaction(); using var c=db.CreateCommand(); c.Transaction=tx; c.CommandText="DELETE FROM messages WHERE account=$a AND folder=$f AND validity<>$v; DELETE FROM attachments WHERE account=$a AND folder=$f AND validity<>$v; DELETE FROM attachment_sets WHERE account=$a AND folder=$f AND validity<>$v; DELETE FROM attachment_flags WHERE account=$a AND folder=$f AND validity<>$v; UPDATE folders SET validity=$v WHERE account=$a AND path=$f"; c.Parameters.AddWithValue("$a",account); c.Parameters.AddWithValue("$f",folder); c.Parameters.AddWithValue("$v",validity); c.ExecuteNonQuery(); tx.Commit();

@@ -127,6 +127,18 @@ public sealed class MailService
         return result;
     }
 
+    public List<MailItem> SearchAgentMessages(string? folder, string query, string sender, string from, string to, int offset, int limit)
+    {
+        var selected = account ?? throw new InvalidOperationException("请先配置邮箱。");
+        return cache.SearchAgentMessages(selected.Address, folder, query, sender, from, to, offset, limit);
+    }
+    public MailItem? GetCachedAgentMessage(MailItem item)
+    {
+        if (!string.Equals(account?.Address, item.Account, StringComparison.OrdinalIgnoreCase) || cache.Validity(item.Account, item.Folder) != item.Validity) return null;
+        var current = cache.Get(item.Account, item.Folder, item.Validity, item.Uid);
+        if (current != null) SetIdentity(current, item.Account, item.Folder, item.Validity);
+        return current;
+    }
     public void Load()
     {
         if (!File.Exists(ConfigPath)) return;

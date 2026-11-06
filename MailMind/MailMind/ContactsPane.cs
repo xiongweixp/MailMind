@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Globalization;
+using System.Text;
 using Microsoft.Data.Sqlite;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -19,6 +21,8 @@ public sealed class ContactsPane : Grid
     private readonly TextBlock count = new() { Margin = new Thickness(12), Opacity = .65 };
     private List<Contact> contacts = new();
     private bool editing;
+    private static readonly int[] InitialStarts = { -20319, -20284, -19776, -19219, -18711, -18527, -18240, -17923, -17418, -16475, -16213, -15641, -15166, -14923, -14915, -14631, -14150, -14091, -13319, -12839, -12557, -11848, -11056 };
+    private static readonly Encoding PinyinEncoding = CreatePinyinEncoding();
     public event Action<string>? ComposeRequested;
     public event Action<RecentMail>? MailRequested;
     public sealed record RecentMail(string Account, string Folder, uint Validity, uint Uid, string Subject, string Date);
@@ -70,6 +74,23 @@ public sealed class ContactsPane : Grid
         Refresh();
     }
     private SqliteConnection Open() { var db = new SqliteConnection(connection); db.Open(); return db; }
+    public (List<Contact> Matches, bool Truncated) SearchContacts(string query, int limit = 20)
+    {
+        query = query.Trim();
+        if (query.Length == 0) throw new ArgumentException("请输入联系人姓名或邮箱。", nameof(query));
+        var matches = new List<Contact>();
+        using var db = Open(); using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT id,name,email,phone,company,department,title,notes FROM contacts ORDER BY name COLLATE NOCASE";
+        using var rows = cmd.ExecuteReader();
+        while (rows.Read())
+        {
+            var name = rows.GetString(1); var email = rows.GetString(2);
+            if (!name.Contains(query, StringComparison.OrdinalIgnoreCase) && !email.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
+            if (matches.Count == limit) return (matches, true);
+            matches.Add(new Contact(rows.GetInt64(0), name, email, rows.GetString(3), rows.GetString(4), rows.GetString(5), rows.GetString(6), rows.GetString(7)));
+        }
+        return (matches, false);
+    }
     private int ImportCachedSenders()
     {
         using var db = Open();
@@ -120,10 +141,20 @@ public sealed class ContactsPane : Grid
     }
     private void Filter()
     {
-        var query = search.Text.Trim(); var results = contacts.Where(c => c.Name.Contains(query, StringComparison.OrdinalIgnoreCase) || c.Email.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+        var query = search.Text.Trim();
+        var results = contacts.Where(c => c.Name.Contains(query, StringComparison.OrdinalIgnoreCase) || c.Email.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(c => Initial(c.Name) == '#' ? '[' : Initial(c.Name))
+            .ThenBy(c => c.Name, StringComparer.Create(CultureInfo.GetCultureInfo("zh-CN"), true)).ToList();
         list.Items.Clear();
+        char? previous = null;
         foreach (var c in results)
         {
+            char initial = Initial(c.Name);
+            if (initial != previous)
+            {
+                list.Items.Add(new ListViewItem { IsEnabled = false, IsHitTestVisible = false, Content = new TextBlock { Text = initial.ToString(), FontSize = 16, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(2, 8, 0, 0) } });
+                previous = initial;
+            }
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Padding = new Thickness(0, 6, 0, 6) };
             row.Children.Add(Avatar(c, 48));
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 3 };
@@ -132,7 +163,29 @@ public sealed class ContactsPane : Grid
             list.Items.Add(new ListViewItem { Content = row, Tag = c, HorizontalContentAlignment = HorizontalAlignment.Stretch });
         }
         count.Text = $"共 {results.Count} 位联系人";
-        if (results.Count > 0) list.SelectedIndex = 0; else ShowDetail();
+        if (results.Count > 0) list.SelectedItem = list.Items.OfType<ListViewItem>().First(item => item.Tag is Contact); else ShowDetail();
+    }
+    private static Encoding CreatePinyinEncoding()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        return Encoding.GetEncoding("GB2312", EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+    }
+    private static char Initial(string name)
+    {
+        var trimmed = name.Trim();
+        if (trimmed.Length == 0) return '#';
+        char first = char.ToUpperInvariant(trimmed[0]);
+        if (first >= 'A' && first <= 'Z') return first;
+        try
+        {
+            var encoded = PinyinEncoding.GetBytes(trimmed.Substring(0, 1));
+            if (encoded.Length != 2) return '#';
+            int code = encoded[0] * 256 + encoded[1] - 65536;
+            const string letters = "ABCDEFGHJKLMNOPQRSTWXYZ";
+            for (int i = InitialStarts.Length - 1; i >= 0; i--) if (code >= InitialStarts[i] && code <= -10247) return letters[i];
+        }
+        catch (EncoderFallbackException) { }
+        return '#';
     }
     private void ShowDetail()
     {
@@ -147,7 +200,12 @@ public sealed class ContactsPane : Grid
         identityText.Children.Add(new TextBlock { Text = c.Name, FontSize = 26, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }); identityText.Children.Add(new TextBlock { Text = Subtitle(c), Opacity = .65 }); identity.Children.Add(identityText); detail.Children.Add(Card(identity));
         var info = new StackPanel { Spacing = 16 };
         info.Children.Add(new TextBlock { Text = "联系信息", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        foreach (var (label, value) in new[] { ("邮箱", c.Email), ("电话", c.Phone), ("公司", c.Company), ("备注", c.Notes) }) info.Children.Add(new TextBlock { Text = $"{label}       {(string.IsNullOrWhiteSpace(value) ? "—" : value)}", TextWrapping = TextWrapping.Wrap });
+        foreach (var (label, value, glyph) in new[] { ("邮箱", c.Email, "\uE715"), ("电话", c.Phone, "\uE717"), ("公司", c.Company, "\uE80F"), ("备注", c.Notes, "\uE8A5") })
+        {
+            var row = InfoRow(label, glyph);
+            var text = new TextBlock { Text = string.IsNullOrWhiteSpace(value) ? "—" : value, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+            SetColumn(text, 2); row.Children.Add(text); info.Children.Add(row);
+        }
         detail.Children.Add(Card(info));
         var recent = RecentMessages(c.Email);
         var history = new StackPanel { Spacing = 10 };
@@ -162,9 +220,10 @@ public sealed class ContactsPane : Grid
             if (recent.Count == 0) entries.Children.Add(new TextBlock { Text = "本地缓存中暂无该联系人的来信", Opacity = .65, TextWrapping = TextWrapping.Wrap });
             foreach (var message in recent.Take(limit))
             {
-                var row = new Grid { ColumnSpacing = 12 }; row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                row.Children.Add(new TextBlock { Text = "✉  " + message.Subject, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
-                var date = new TextBlock { Text = message.Date, Opacity = .6, VerticalAlignment = VerticalAlignment.Center }; SetColumn(date, 1); row.Children.Add(date);
+                var row = new Grid { ColumnSpacing = 12 }; row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.Children.Add(InfoIcon("\uE715"));
+                var subject = new TextBlock { Text = message.Subject, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center }; SetColumn(subject, 1); row.Children.Add(subject);
+                var date = new TextBlock { Text = message.Date, Opacity = .6, VerticalAlignment = VerticalAlignment.Center }; SetColumn(date, 2); row.Children.Add(date);
                 var button = new Button { Content = row, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0), Padding = new Thickness(0, 8, 0, 8) };
                 button.Click += (_, _) => MailRequested?.Invoke(message); entries.Children.Add(button);
             }
@@ -189,13 +248,25 @@ public sealed class ContactsPane : Grid
         return result;
     }
     private Contact? SelectedContact() => (list.SelectedItem as ListViewItem)?.Tag as Contact;
+    private static FontIcon InfoIcon(string glyph) => new() { Glyph = glyph, FontSize = 18, VerticalAlignment = VerticalAlignment.Center };
+    private static Grid InfoRow(string label, string glyph)
+    {
+        var row = new Grid { ColumnSpacing = 12 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) });
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.Children.Add(InfoIcon(glyph));
+        var text = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center }; SetColumn(text, 1); row.Children.Add(text);
+        return row;
+    }
     private static string Subtitle(Contact c) { var parts = new[] { c.Department, c.Title }.Where(x => !string.IsNullOrWhiteSpace(x)).ToArray(); return parts.Length == 0 ? c.Email : string.Join(" · ", parts); }
     private static Border Avatar(Contact c, double size)
     {
         byte[][] palette = { new byte[] { 143, 161, 230 }, new byte[] { 143, 199, 188 }, new byte[] { 202, 137, 146 }, new byte[] { 232, 164, 83 }, new byte[] { 165, 143, 219 } };
         int hash = 0; foreach (char ch in c.Email) hash = (hash * 31 + ch) & int.MaxValue;
         var color = palette[hash % palette.Length];
-        return new Border { Width = size, Height = size, CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, color[0], color[1], color[2])), Child = new TextBlock { Text = c.Name.Length > 0 ? c.Name.Substring(0, 1).ToUpperInvariant() : "?", FontSize = size * .4, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+        char initial = Initial(c.Name);
+        return new Border { Width = size, Height = size, CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, color[0], color[1], color[2])), Child = new TextBlock { Text = initial == '#' ? (c.Name.Length > 0 ? c.Name.Substring(0, 1) : "?") : initial.ToString(), FontSize = size * .4, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
     }
     private static Border Card(UIElement child) => new() { Child = child, Padding = new Thickness(20), CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(100, 150, 160, 175)) };
     private void Edit(Contact? c)
@@ -222,12 +293,10 @@ public sealed class ContactsPane : Grid
         detail.Children.Add(Card(identity));
         var info = new StackPanel { Spacing = 16 };
         info.Children.Add(new TextBlock { Text = "联系信息", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        foreach (var (label, index) in new[] { ("邮箱", 1), ("电话", 2), ("公司", 3), ("备注", 6) })
+        foreach (var (label, index, glyph) in new[] { ("邮箱", 1, "\uE715"), ("电话", 2, "\uE717"), ("公司", 3, "\uE80F"), ("备注", 6, "\uE8A5") })
         {
-            var row = new Grid { ColumnSpacing = 12 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(44) }); row.ColumnDefinitions.Add(new ColumnDefinition());
-            row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
-            SetColumn(fields[index], 1); row.Children.Add(fields[index]); info.Children.Add(row);
+            var row = InfoRow(label, glyph);
+            SetColumn(fields[index], 2); row.Children.Add(fields[index]); info.Children.Add(row);
         }
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 190, 45, 45)) };
         info.Children.Add(error); detail.Children.Add(Card(info));

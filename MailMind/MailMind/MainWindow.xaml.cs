@@ -18,6 +18,7 @@ public sealed partial class MainWindow : Window
     private readonly DecisionService decision = new();
     private readonly MailAgent agent = new();
     private readonly System.Collections.Generic.List<AgentMessage> agentHistory = new();
+    private readonly System.Collections.Generic.Dictionary<string, MailItem> agentMailIds = new();
     private record DraftSnapshot(string To, string Cc, string Subject, string Html);
     private DraftSnapshot? agentDraftSnapshot;
     private bool agentDraftModified;
@@ -194,6 +195,7 @@ public sealed partial class MainWindow : Window
     }
     private async Task OpenContactMailAsync(ContactsPane.RecentMail message)
     {
+        if (ComposeWorkspace.Visibility == Visibility.Visible) { await ShowNotice("正在写邮件", "请先关闭写信区，再打开邮件。"); return; }
         if (!string.Equals(mail.Account?.Address, message.Account, StringComparison.OrdinalIgnoreCase))
         {
             await ShowNotice("无法打开邮件", "这封邮件属于其他邮箱，请先切换到对应邮箱。");
@@ -819,7 +821,7 @@ public sealed partial class MainWindow : Window
     {
         if (closing) return;
         if (kind == "start") AgentMarkdown.Render(view.Text, "");
-        else if (kind == "message") AgentMarkdown.Render(view.Text, value);
+        else if (kind == "message") AgentMarkdown.Render(view.Text, value, OpenAgentMail);
         else if (kind == "thinking" && value.Length > 0)
         {
             view.Thinking.Visibility = Visibility.Visible;
@@ -884,11 +886,11 @@ public sealed partial class MainWindow : Window
             if (closing) return;
             string message = result.Message;
             if (string.IsNullOrWhiteSpace(message)) message = "请告诉我更多细节。";
-            AgentMarkdown.Render(responseView.Text, message);
+            AgentMarkdown.Render(responseView.Text, message, OpenAgentMail);
             agentHistory.Add(new AgentMessage("assistant", message));
         }
         catch (OperationCanceledException) when (closing) { }
-        catch (Exception ex) { if (!closing) AgentMarkdown.Render(responseView.Text, "无法完成：" + ex.Message); }
+        catch (Exception ex) { if (!closing) AgentMarkdown.Render(responseView.Text, agentDraftModified ? "草稿已更新，尚未发送。助手的后续回复失败，请检查草稿：" + ex.Message : "无法完成：" + ex.Message); }
         finally
         {
             SetAgentThinking(responseView, false);
@@ -916,6 +918,56 @@ public sealed partial class MainWindow : Window
             return JsonSerializer.Serialize(new { success = true, to = snapshot.To, cc = snapshot.Cc, subject = snapshot.Subject, body }, MailAgent.ReadableJson);
         }
         if (args.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("工具参数必须是对象。");
+        if (name == "list_mail_folders")
+        {
+            if (mail.Account == null) throw new InvalidOperationException("请先配置邮箱。");
+            var folders = mail.CachedFolders();
+            return JsonSerializer.Serialize(new { success = true, source = "本地缓存", truncated = folders.Count > 50, folders = System.Linq.Enumerable.Select(System.Linq.Enumerable.Take(folders, 50), f => new { path = f.Path, name = f.Name, selectable = f.Selectable }) }, MailAgent.ReadableJson);
+        }
+        if (name == "search_mail")
+        {
+            string TextArg(string key)
+            {
+                if (!args.TryGetProperty(key, out var value)) return "";
+                if (value.ValueKind != JsonValueKind.String) throw new InvalidOperationException($"{key} 必须是字符串。");
+                string text = (value.GetString() ?? "").Trim();
+                if (text.Length > 256) throw new InvalidOperationException($"{key} 过长。");
+                return text;
+            }
+            string query = TextArg("query"), sender = TextArg("sender"), path = TextArg("folder"), from = TextArg("from"), to = TextArg("to");
+            foreach (var date in new[] { from, to })
+                if (date.Length > 0 && !DateTime.TryParseExact(date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _)) throw new InvalidOperationException("日期必须为 YYYY-MM-DD 格式。");
+            if (from.Length > 0 && to.Length > 0 && string.CompareOrdinal(from, to) > 0) throw new InvalidOperationException("开始日期不能晚于结束日期。");
+            int offset = AgentOffset(args);
+            const int pageSize = 8;
+            var items = mail.SearchAgentMessages(path, query, sender, from, to, offset, pageSize + 1);
+            var results = new System.Collections.Generic.List<object>();
+            foreach (var item in System.Linq.Enumerable.Take(items, pageSize))
+            {
+                string id = RegisterAgentMail(item);
+                results.Add(new { id, link = "mailmind:mail/" + id, folder = item.Folder, sender = LimitAgentText(item.Sender, 160), subject = LimitAgentText(item.Subject, 200), date = item.Date, preview = LimitAgentText(item.Preview, 160), unread = item.IsSeen == null ? (bool?)null : !item.IsSeen.Value });
+            }
+            return JsonSerializer.Serialize(new { success = true, source = "当前邮箱本地缓存，可能不完整；关键词只匹配发件人、主题和摘要", messages = results, next_offset = items.Count > pageSize ? (int?)(offset + pageSize) : null }, MailAgent.ReadableJson);
+        }
+        if (name == "read_mail")
+        {
+            if (!args.TryGetProperty("id", out var idValue) || idValue.ValueKind != JsonValueKind.String || !agentMailIds.TryGetValue(idValue.GetString() ?? "", out var stored)) throw new InvalidOperationException("邮件标识无效或已过期，请重新搜索。");
+            var item = mail.GetCachedAgentMessage(stored) ?? throw new InvalidOperationException("邮件不在当前账户的有效缓存中，请重新搜索。");
+            int offset = AgentOffset(args);
+            string body = await mail.GetSearchBodyAsync(item, token);
+            if (mail.GetCachedAgentMessage(stored) == null) throw new InvalidOperationException("账户或邮件缓存已改变，请重新搜索。");
+            if (offset > body.Length) throw new InvalidOperationException("正文偏移超出范围。");
+            int length = Math.Min(3500, body.Length - offset);
+            if (offset + length < body.Length && length > 0 && char.IsHighSurrogate(body[offset + length - 1]) && char.IsLowSurrogate(body[offset + length])) length--;
+            return JsonSerializer.Serialize(new { success = true, id = idValue.GetString(), link = "mailmind:mail/" + idValue.GetString(), sender = LimitAgentText(item.Sender, 160), subject = LimitAgentText(item.Subject, 200), date = item.Date, offset, body = body.Substring(offset, length), next_offset = offset + length < body.Length ? (int?)(offset + length) : null }, MailAgent.ReadableJson);
+        }
+        if (name == "search_contacts")
+        {
+            if (!args.TryGetProperty("query", out var query) || query.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(query.GetString()))
+                throw new InvalidOperationException("请提供要查询的联系人姓名或邮箱。");
+            var (matches, truncated) = ContactsView.SearchContacts(query.GetString()!);
+            return JsonSerializer.Serialize(new { success = true, contacts = System.Linq.Enumerable.Select(matches, contact => new { name = contact.Name, email = contact.Email, company = contact.Company, department = contact.Department, title = contact.Title }), truncated }, MailAgent.ReadableJson);
+        }
         if (name == "compose_email")
         {
             var draft = args.Deserialize<ComposeSkillArguments>() ?? throw new InvalidOperationException("邮件草稿无效。");
@@ -946,15 +998,40 @@ public sealed partial class MainWindow : Window
         }
         throw new InvalidOperationException("不支持此工具。");
     }
+    private static int AgentOffset(JsonElement args)
+    {
+        if (!args.TryGetProperty("offset", out var value)) return 0;
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out int offset) || offset < 0 || offset > 1000000) throw new InvalidOperationException("offset 必须是 0 至 1000000 的整数。");
+        return offset;
+    }
+    private static string LimitAgentText(string value, int limit) => value.Length <= limit ? value : value[..limit] + "…";
+    private string RegisterAgentMail(MailItem item)
+    {
+        foreach (var (id, existing) in agentMailIds)
+            if (existing.Account == item.Account && existing.Folder == item.Folder && existing.Validity == item.Validity && existing.Uid == item.Uid) return id;
+        string newId = Guid.NewGuid().ToString("N"); agentMailIds[newId] = item; return newId;
+    }
+    private async void OpenAgentMail(string id)
+    {
+        try
+        {
+            if (!agentMailIds.TryGetValue(id.ToLowerInvariant(), out var item)) { await ShowNotice("无法打开邮件", "邮件链接无效或已过期，请重新查询。"); return; }
+            if (!string.Equals(mail.Account?.Address, item.Account, StringComparison.OrdinalIgnoreCase)) { await ShowNotice("无法打开邮件", "这封邮件属于其他邮箱，请先切换到对应邮箱。"); return; }
+            if (mail.GetCachedAgentMessage(item) == null) { await ShowNotice("无法打开邮件", "邮件已不在当前有效缓存中，请重新查询。"); return; }
+            await OpenContactMailAsync(new ContactsPane.RecentMail(item.Account, item.Folder, item.Validity, item.Uid, item.Subject, item.Date));
+        }
+        catch (Exception ex) { if (!closing) await ShowNotice("无法打开邮件", ex.Message); }
+    }
     private async Task<string> ReadCurrentEmailForAgentAsync(System.Threading.CancellationToken token)
     {
         if (MailList.SelectedItem is not MailItem item) throw new InvalidOperationException("请先选择要读取的邮件。");
         string body = await mail.GetSearchBodyAsync(item, token);
         if (!ReferenceEquals(MailList.SelectedItem, item)) throw new InvalidOperationException("选中的邮件已改变，请重新提出请求。");
-        const int limit = 24000;
+        const int limit = 3500;
         bool truncated = body.Length > limit;
         if (truncated) body = body[..limit];
-        return JsonSerializer.Serialize(new { sender = item.Sender, subject = item.Subject, date = item.Date, body, truncated }, MailAgent.ReadableJson);
+        string id = RegisterAgentMail(item);
+        return JsonSerializer.Serialize(new { id, link = "mailmind:mail/" + id, sender = item.Sender, subject = item.Subject, date = item.Date, body, truncated }, MailAgent.ReadableJson);
     }
     private void AgentSummarize_Click(object sender, RoutedEventArgs e)
     {

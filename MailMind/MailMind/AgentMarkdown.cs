@@ -8,10 +8,10 @@ namespace MailMind;
 // Render common Markdown directly in the selectable text block, including partial streamed text.
 internal static class AgentMarkdown
 {
-    private static readonly Regex Inline = new(@"(\*\*[^*\r\n]+\*\*|`[^`\r\n]+`|(?<!\*)\*[^*\r\n]+\*)", RegexOptions.Compiled);
+    private static readonly Regex Inline = new(@"(\[[^\]\r\n]+\]\(mailmind:mail/[0-9a-f]{32}\)|\*\*[^*\r\n]+\*\*|`[^`\r\n]+`|(?<!\*)\*[^*\r\n]+\*)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex ListItem = new(@"^(\s*)([-*+]\s+|\d+[.)]\s+)", RegexOptions.Compiled);
 
-    public static void Render(TextBlock target, string text)
+    public static void Render(TextBlock target, string text, Action<string>? openMail = null)
     {
         target.Inlines.Clear();
         var lines = text.Replace("\r\n", "\n").Split('\n');
@@ -29,8 +29,21 @@ internal static class AgentMarkdown
             {
                 Add(target, line[start..match.Index], heading, code);
                 string part = match.Value;
-                bool strong = part.StartsWith("**", StringComparison.Ordinal);
-                Add(target, part[(strong ? 2 : 1)..^(strong ? 2 : 1)], heading || strong, part[0] == '`', !strong && part[0] == '*');
+                if (!code && openMail != null && part[0] == '[')
+                {
+                    int separator = part.IndexOf("](mailmind:mail/", StringComparison.OrdinalIgnoreCase);
+                    var link = new Hyperlink();
+                    link.Inlines.Add(new Run { Text = part[1..separator] });
+                    string id = part[(separator + "](mailmind:mail/".Length)..^1];
+                    link.Click += (_, _) => openMail(id);
+                    target.Inlines.Add(link);
+                }
+                else if (part[0] == '[') Add(target, part, heading, code);
+                else
+                {
+                    bool strong = part.StartsWith("**", StringComparison.Ordinal);
+                    Add(target, part[(strong ? 2 : 1)..^(strong ? 2 : 1)], heading || strong, part[0] == '`', !strong && part[0] == '*');
+                }
                 start = match.Index + match.Length;
             }
             Add(target, line[start..], heading, code);
