@@ -1,54 +1,69 @@
-# 智邮 MailMind
+# MailMind
 
-MailMind 是一个基于 WinUI 3 的 Windows 桌面邮件客户端。它通过 IMAP 连接邮箱，提供邮件浏览、阅读和本地缓存；AI 助手与邮件发送界面目前仍在开发中。
+**An AI agent-powered Windows email client for understanding, searching, and writing mail locally.**
 
-## 当前功能
+English | [简体中文](README.zh-CN.md)
 
-- 配置一个邮箱账户，保存前测试 IMAP 连接，支持 SSL/TLS 和 STARTTLS。
-- 浏览邮箱文件夹、按日期分组查看邮件，滚动加载邮件列表。
-- 阅读纯文本和 HTML 邮件，显示未读状态并尝试将已读状态同步到服务器。
-- 在已加载邮件中搜索和按日期筛选。
-- 使用 SQLite 缓存邮件目录、列表和已读取的正文，连接失败时可查看已有缓存。
+MailMind is an email client powered by a local AI agent. It can assess email importance in the context of your role, find messages using natural language, understand the message you are reading, and help draft replies. With local models, AI inference for business email can run entirely on your own computer, without sending message contents to a cloud AI service.
 
-> 写邮件界面和 SMTP 配置已提供，但发送尚未实现；回复、转发、删除、归档以及 AI 搜索和助手功能尚未启用。
+> Sending and receiving mail still requires a connection to your email provider. Protect your device, credentials, and local cache, and review AI classifications and drafts.
 
-## 环境要求
+## Screenshots
 
-- Windows 10（最低版本 1809，内部版本 17763）或更高版本。
-- Visual Studio，安装 .NET 桌面开发、Windows 应用开发相关组件和 Windows SDK。
-- .NET 8 SDK；项目使用 Windows App SDK 和 WinUI 3，支持 x86、x64 和 ARM64。
-- 可访问 IMAP 的邮箱，必要时需在邮箱服务商处启用 IMAP 并获取授权码。
+| | |
+| --- | --- |
+| ![AI search](ScreenShot/ai_search.png) | ![AI summary](ScreenShot/ai_Summarize.png) |
+| AI search | AI summary |
+| ![AI writing](ScreenShot/ai_writting.png) | ![Attachment preview](ScreenShot/preview.png) |
+| AI writing | Attachment preview |
 
-## 构建和运行
+## AI Features
 
-1. 使用 Visual Studio 打开根目录下的 `MailMind.slnx`。
-2. 等待 NuGet 包还原，选择与设备匹配的平台（例如 `x64`）。
-3. 选择 `MailMind` 应用项目或打包项目作为启动项目，生成并运行。
+- **Importance labels:** Classify messages as important, normal, or ignorable using the sender, subject, preview, and your personal profile.
+- **Natural-language AI search:** Find messages by meaning and related expressions, rather than exact keywords alone. Results are limited by which messages have been loaded and can be read.
+- **AI email assistant:** Summarize the selected message, identify key points and actions, search locally cached messages, read mail, and look up contacts through conversation.
+- **Writing assistance:** Create or edit drafts from your instructions, or generate a reply to the current message. Review drafts before sending; the assistant does not send mail on its own.
+- **Local AI:** Models run on your computer and MailMind calls the model service through `127.0.0.1`. You choose and control the models and runtime.
 
-解决方案同时包含 Windows 应用打包项目，可使用 Visual Studio 的打包工具创建应用包。项目依赖的主要 NuGet 包包括 Windows App SDK、MailKit 和 Microsoft.Data.Sqlite。
+## Configure Local AI
 
-## 配置邮箱
+MailMind uses two kinds of models from the same local model service:
 
-1. 启动应用，点击左下角的“配置”。
-2. 填写邮箱地址、用户名、IMAP 服务器和端口，以及密码或邮箱授权码；按服务商要求选择连接方式。
-3. 可填写 SMTP 服务器信息供后续使用。保存时应用会测试 IMAP 连接，但不会测试或发送 SMTP 邮件。
-4. 连接成功后，在左侧选择文件夹并点击邮件阅读。首次离线使用前，需要先联网加载相应邮件和正文。
+| Model | Purpose | Recommendation |
+| --- | --- | --- |
+| SystemOne decision model | Importance labels and AI search | Try `cloudflare-clev-flash-` with a local service that supports `/v1/systemone`. |
+| Completion model | Email drafting, summaries, and the AI assistant | Try Qwen3-14B; use a quantized version if memory is limited. |
 
-服务器地址、端口、加密方式和授权码获取方式请以邮箱服务商的说明为准。取消勾选“使用 SSL/TLS”时，应用使用 STARTTLS。
+Quality and speed depend on your hardware, quantization, and model capabilities. A general chat model does not necessarily support SystemOne, and an OpenAI-compatible chat endpoint alone is insufficient for decision features. Verify that your service exposes `/v1/systemone` and `/v1/chat/completions` and lists models with `decision` and `llm`/`vlm` types respectively.
 
-## 本地数据
+1. Install and start LM Studio or Lemonade Server locally. Prepare a decision model and a generation model supported by the required endpoints, then start the service.
+2. Open **Configuration** in MailMind and go to AI settings. Select the service and enter its port (default: `1234` for LM Studio, `13305` for Lemonade Server).
+3. Refresh the model list, select a decision model and a generation model, enter a personal profile, enable AI classification, and save.
+4. If a model is missing, check that the service is running, the port and APIs are compatible, and the service recognizes the model.
 
-账户配置保存在 `%LOCALAPPDATA%\MailMind\account.json`，邮件缓存保存在同一目录下的 `mailmind.db`。密码或授权码通过 Windows 凭据管理器保存。缓存可能包含邮件正文，请按个人数据妥善保护设备和备份。
+## Attachments and Email
 
-## 项目结构
+Preview attachments directly in MailMind or save them to your device. Available preview formats depend on the types allowed by the app and the Windows preview handlers installed on your system.
 
-```text
-MailMind.slnx                       Visual Studio 解决方案
-MailMind/MailMind/                  WinUI 应用
-  MainWindow.xaml(.cs)              界面和交互
-  MailService.cs                   IMAP 账户与邮件服务
-  MailCache.cs                     SQLite 缓存
-  InlineImageResolver.cs           邮件内嵌图片处理
-MailMind/MailMind (Package)/        Windows 应用打包项目
-docs/设计文档/                     需求、概要设计和界面设计资料
-```
+MailMind also supports IMAP browsing, SMTP sending, folders, contacts, date filtering, and a local SQLite cache. Cached content remains available when the connection fails; initial loading requires a connection.
+
+## Getting Started
+
+- Windows 11 (build 22000) or later, as required by the packaging project's minimum target version.
+- Visual Studio with .NET desktop and Windows application development components and the Windows SDK; .NET 8 SDK.
+- An email account with IMAP and SMTP access and any password or app authorization code required by your provider.
+
+Open `MailMind.slnx` in Visual Studio, restore NuGet packages, select the platform matching your device, and run the app. Open **Configuration**, enter your IMAP and SMTP settings, and save. Configure AI separately using the steps above.
+
+Account configuration, AI settings, and the mail cache are stored under `%LOCALAPPDATA%\MailMind`. Mail passwords or authorization codes are stored in Windows Credential Manager. The cache can contain message bodies and attachments, so protect your device and backups.
+
+## Roadmap
+
+- **Ollama support:** Add support for running local models with Ollama.
+- **Skill support:** Extend the AI assistant with skills so it can handle more tasks.
+- **System tray and notifications:** Show Windows notifications for important messages, change only the tray icon for normal messages, and leave ignorable messages silent.
+- **MCP support:** Allow agents such as WorkBuddy to operate the client and help process email through MCP.
+
+## License
+
+MailMind is open source under the [MIT License](LICENSE).
