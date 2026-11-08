@@ -56,7 +56,12 @@ public record MailItem(uint Uid, string Sender, string Subject, string Date, str
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     public void MarkSeen()
     {
-        IsSeen = true;
+        SetSeen(true);
+    }
+    public void SetSeen(bool? value)
+    {
+        if (IsSeen == value) return;
+        IsSeen = value;
         PropertyChanged?.Invoke(this, new(nameof(IsSeen)));
         PropertyChanged?.Invoke(this, new(nameof(UnreadVisibility)));
         PropertyChanged?.Invoke(this, new(nameof(MailWeight)));
@@ -209,6 +214,68 @@ public sealed class MailService
         catch { client.Dispose(); throw; }
     }
     public List<MailFolderInfo> CachedFolders() => account == null ? new() : cache.Folders(account.Address);
+    public async Task SyncFolderAsync(string path, System.Threading.CancellationToken token)
+    {
+        var selected = account ?? throw new InvalidOperationException("No mail account configured.");
+        var secret = password ?? throw new InvalidOperationException("No mail password configured.");
+        using var client = new ImapClient();
+        await ConnectAsync(client, selected, secret, token);
+        var remote = await client.GetFolderAsync(path, token);
+        await remote.OpenAsync(FolderAccess.ReadOnly, token);
+        var found = await remote.SearchAsync(SearchQuery.All, token);
+        if (found.Count < remote.Count)
+        {
+            var all = await remote.FetchAsync(0, -1, MessageSummaryItems.UniqueId, token);
+            found = all.Select(s => s.UniqueId).Where(id => id.IsValid).ToList();
+            if (found.Count < remote.Count) throw new InvalidDataException("The server did not return all message IDs.");
+        }
+        uint currentValidity = remote.UidValidity;
+        foreach (var batch in found.Chunk(50))
+        {
+            token.ThrowIfCancellationRequested();
+            IList<IMessageSummary> summaries;
+            try { summaries = await remote.FetchAsync(batch, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.PreviewText | MessageSummaryItems.Flags | MessageSummaryItems.BodyStructure, token); }
+            catch (ImapCommandException) { summaries = await remote.FetchAsync(batch, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Flags | MessageSummaryItems.BodyStructure, token); }
+            if (summaries.Count != batch.Length) throw new InvalidDataException("The server message list changed during synchronization.");
+            foreach (var summary in summaries)
+            {
+                var uid = summary.UniqueId.Id;
+                var previous = cache.Get(selected.Address, path, currentValidity, uid);
+                var item = new MailItem(uid, summary.Envelope?.From.ToString() ?? "", summary.Envelope?.Subject ?? "", summary.Envelope?.Date?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "", summary.PreviewText ?? previous?.Preview ?? "", summary.Flags.HasValue ? (summary.Flags.Value & MessageFlags.Seen) != 0 : null);
+                SetIdentity(item, selected.Address, path, currentValidity);
+                item.HasAttachments = summary.Body != null ? summary.Attachments.Any() : previous?.HasAttachments;
+                cache.Put(selected.Address, path, currentValidity, item);
+                cache.PutAttachmentFlag(item);
+                if ((cache.HtmlVersion(selected.Address, path, currentValidity, uid) >= 2 || cache.Body(selected.Address, path, currentValidity, uid) != null) && cache.HasAttachmentSet(item)) continue;
+                var message = await remote.GetMessageAsync(summary.UniqueId, token);
+                if (message.HtmlBody != null) cache.PutHtmlBody(selected.Address, path, currentValidity, uid, InlineImageResolver.Resolve(message));
+                else cache.PutBody(selected.Address, path, currentValidity, uid, message.TextBody ?? "");
+                var attachments = new List<MailAttachment>();
+                foreach (var entity in message.Attachments)
+                {
+                    using var stream = new MemoryStream();
+                    string name;
+                    if (entity is MimePart part) { name = part.FileName ?? "attachment"; if (part.Content != null) await part.Content.DecodeToAsync(stream, token); }
+                    else if (entity is MessagePart nested) { name = nested.ContentDisposition?.FileName ?? "message.eml"; if (nested.Message != null) await nested.Message.WriteToAsync(stream, token); }
+                    else continue;
+                    attachments.Add(new(name, entity.ContentType.MimeType, stream.ToArray()));
+                }
+                cache.PutAttachments(item, attachments);
+                item.HasAttachments = attachments.Count > 0; cache.PutAttachmentFlag(item);
+            }
+        }
+        token.ThrowIfCancellationRequested();
+        if (!ReferenceEquals(account, selected)) return;
+        var verified = await remote.SearchAsync(SearchQuery.All, token);
+        if (verified.Count < remote.Count)
+        {
+            var all = await remote.FetchAsync(0, -1, MessageSummaryItems.UniqueId, token);
+            verified = all.Select(s => s.UniqueId).Where(id => id.IsValid).ToList();
+        }
+        if (verified.Count != remote.Count || !verified.OrderBy(id => id.Id).SequenceEqual(found.OrderBy(id => id.Id)))
+            throw new InvalidDataException("The server message list changed during synchronization.");
+        cache.RemoveMissing(selected.Address, path, currentValidity, found.Select(id => id.Id).ToArray());
+    }
     public async Task<IReadOnlyList<MailFolderInfo>> GetFoldersAsync()
     {
         using var client = await ConnectAsync();
@@ -385,7 +452,7 @@ public sealed class MailService
         // Rebuild older HTML caches once so Content-Location images can be resolved too.
         if (html != null && (Offline || cache.HtmlVersion(selectedAccount.Address, path, expectedValidity, uid) >= 2)) return new(html, true);
         var cached = cache.Body(selectedAccount.Address, path, expectedValidity, uid);
-        if (Offline && cached != null) return new(cached, false);
+        if (cached != null) return new(cached, false);
         try
         {
         using var client = await ConnectAsync();

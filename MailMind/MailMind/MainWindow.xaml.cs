@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Input;
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Text.Json;
 using System.Runtime.InteropServices;
@@ -64,6 +65,7 @@ public sealed partial class MainWindow : Window
     private int total, offset;
     private string folder = "收件箱";
     private ScrollViewer? listScroll;
+    private double lastMailScrollOffset;
     private bool pageLoadFailed, pageCheckQueued;
     private DateTime? searchDate;
     private bool htmlResourceHandlerReady;
@@ -110,6 +112,12 @@ public sealed partial class MainWindow : Window
             if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && e.NewItems != null)
             {
                 foreach (MailItem item in e.NewItems) { if (!aiSearchShowing && MatchesSearch(item)) AddToDateGroup(item); _ = ClassifyAsync(item); }
+            }
+            else if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Remove && e.OldItems != null)
+            {
+                foreach (MailItem item in e.OldItems)
+                    foreach (var group in dateGroups.ToArray())
+                        if (group.Remove(item) && group.Count == 0) dateGroups.Remove(group);
             }
             else ApplySearch();
         };
@@ -165,11 +173,6 @@ public sealed partial class MainWindow : Window
     private async Task ClassifyAsync(MailItem item, bool force = false)
     {
         var settings = decision.Settings;
-        var fingerprint = DecisionService.Fingerprint(settings, item);
-        string? cached;
-        try { cached = force ? null : mail.CachedClassification(item, fingerprint); }
-        catch (Exception ex) { item.Importance = "失败"; if (!closing) ListStatus.Text = Strings.Get("Ui_2a353cb3737f") + ex.Message; return; }
-        if (cached != null) { item.Importance = cached; return; }
         if (!settings.Enabled) { item.Importance = ""; return; }
         item.Importance = Strings.Get("Ui_4dcbbcfa6154");
         try { await decisionQueue.WaitAsync(windowLifetime.Token); }
@@ -177,10 +180,13 @@ public sealed partial class MainWindow : Window
         try
         {
             if (!System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) || decision.Settings != settings) return;
-            cached = force ? null : mail.CachedClassification(item, fingerprint);
+            var body = await mail.GetSearchBodyAsync(item, windowLifetime.Token);
+            if (!System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) || decision.Settings != settings) return;
+            var fingerprint = DecisionService.Fingerprint(settings, item, body);
+            var cached = force ? null : mail.CachedClassification(item, fingerprint);
             if (cached != null) { item.Importance = cached; return; }
             item.Importance = Strings.Get("Ui_5ecd3061a820");
-            var result = await decision.ClassifyAsync(settings, item, windowLifetime.Token);
+            var result = await decision.ClassifyAsync(settings, item, body, windowLifetime.Token);
             mail.CacheClassification(item, fingerprint, result);
             if (!closing && System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) && decision.Settings == settings) item.Importance = result;
         }
@@ -302,7 +308,7 @@ public sealed partial class MainWindow : Window
         {
             ShowFolders(cached);
             var cachedInbox = cached.Find(f => f.Name == "收件箱" && f.Selectable);
-            if (cachedInbox != null) await OpenFolderAsync(cachedInbox.Path);
+            if (cachedInbox != null && !folderInitialized) await OpenFolderAsync(cachedInbox.Path);
         }
         try
         {
@@ -311,8 +317,9 @@ public sealed partial class MainWindow : Window
             if (closing) return;
             ShowFolders(folders);
             var inbox = System.Linq.Enumerable.FirstOrDefault(folders, f => f.Name == "收件箱" && f.Selectable);
-            if (inbox != null && (cached.Count == 0 || folder != inbox.Path)) await OpenFolderAsync(inbox.Path);
+            if (inbox != null && !folderInitialized) await OpenFolderAsync(inbox.Path);
             else if (inbox == null) ListStatus.Text = Strings.Get("Ui_c76fd62d5450");
+            _ = CheckForNewMailAsync();
         }
         catch (Exception ex)
         {
@@ -321,66 +328,66 @@ public sealed partial class MainWindow : Window
     }
     private async Task CheckForNewMailAsync()
     {
-        if (closing || checkingForMail || loading || mail.Account == null || aiSearchShowing) return;
+        if (closing || checkingForMail || mail.Account == null) return;
         checkingForMail = true;
-        string checkedFolder = folder;
-        string account = mail.Account.Address;
+        var account = mail.Account;
         try
         {
-            if (!folderInitialized) { await LoadFoldersAsync(); return; }
-            bool changed = mail.Offline || await mail.FolderChangedAsync(checkedFolder);
-            if (changed && !closing && !loading && !aiSearchShowing && mail.Account?.Address == account && folder == checkedFolder)
-                await OpenFolderAsync(checkedFolder);
-        }
-        catch (Exception ex)
-        {
-            if (!closing && mail.Account?.Address == account && folder == checkedFolder)
-                ListStatus.Text = Strings.Get("Ui_67c7dec77218") + ex.Message;
+            var folders = mail.CachedFolders().Where(f => f.Selectable).OrderByDescending(f => f.Path == folder).ToList();
+            foreach (var entry in folders)
+            {
+                if (closing || !ReferenceEquals(mail.Account, account)) break;
+                try
+                {
+                    await mail.SyncFolderAsync(entry.Path, windowLifetime.Token);
+                    if (!closing && ReferenceEquals(mail.Account, account) && folder == entry.Path) RefreshCachedList();
+                }
+                catch (OperationCanceledException) when (closing) { break; }
+                catch (Exception ex) { if (!closing && folder == entry.Path) ListStatus.Text = Strings.Get("Ui_67c7dec77218") + ex.Message; }
+            }
         }
         finally { checkingForMail = false; }
     }
-    private async Task OpenFolderAsync(string name)
+    private Task OpenFolderAsync(string name)
     {
         ContactsView.Visibility = Visibility.Collapsed;
-        if (loading) return;
         searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear();
         AiSearchStatusPanel.Visibility = Visibility.Collapsed;
-        loading = true; pageLoadFailed = false; folder = name; UpdateFolderSelection(name); FolderTitle.Text = Strings.FolderName(folderButtons.TryGetValue(name, out var selectedFolder) ? (string)selectedFolder.Tag : name); messages.Clear(); offset = total = 0;
-        ListEmptyText.Visibility = Visibility.Collapsed;
-        if (mail.Account == null) { ListStatus.Text = Strings.Get("Ui_c60d0371ae5e"); loading = false; return; }
-        try
+        bool changed = folder != name || !folderInitialized;
+        folder = name; folderInitialized = true; UpdateFolderSelection(name);
+        FolderTitle.Text = Strings.FolderName(folderButtons.TryGetValue(name, out var selectedFolder) ? (string)selectedFolder.Tag : name);
+        if (changed) { messages.Clear(); offset = total = 0; lastMailScrollOffset = 0; listScroll?.ChangeView(null, 0, null, true); }
+        RefreshCachedList();
+        _ = CheckForNewMailAsync();
+        return Task.CompletedTask;
+    }
+    private void RefreshCachedList()
+    {
+        if (mail.Account == null) return;
+        mail.BeginCachedFolder(folder);
+        var cached = mail.CachedSearchItems(folder);
+        int visibleCount = Math.Max(15, offset);
+        if (messages.Count > 0)
         {
-            total = mail.BeginCachedFolder(name);
-            int count = Math.Max(15, (int)Math.Ceiling(MailList.ActualHeight / 70) + 2);
-            await foreach (var item in mail.GetPageAsync(0, count))
-            {
-                if (closing) return;
-                offset++;
-                if (item != null) messages.Add(item);
-            }
-            ListStatus.Text = messages.Count > 0 ? string.Format(Strings.Get("Fmt_4f922a65014e"), messages.Count) : Strings.Get("Ui_62d8dbdd1c84");
-            int serverTotal = await mail.BeginFolderAsync(name);
-            if (closing) return;
-            folderInitialized = true;
-            if (!mail.Offline)
-            {
-                messages.Clear(); offset = 0; total = serverTotal;
-            }
-            else
-            {
-                total = serverTotal;
-                ListStatus.Text = string.Format(Strings.Get("Fmt_682976292efe"), messages.Count, total, mail.OfflineReason);
-            }
+            var last = messages[messages.Count - 1];
+            int lastIndex = cached.FindIndex(item => item.Uid == last.Uid && item.Validity == last.Validity);
+            if (lastIndex >= 0) visibleCount = Math.Max(visibleCount, lastIndex + 1);
         }
-        catch (Exception ex)
+        var visible = cached.Take(visibleCount).ToList();
+        var desired = visible.ToDictionary(item => item.Uid);
+        for (int i = messages.Count - 1; i >= 0; i--)
+            if (!desired.TryGetValue(messages[i].Uid, out var current) || messages[i].Validity != current.Validity) messages.RemoveAt(i);
+        for (int i = 0; i < visible.Count; i++)
         {
-            if (!closing) ListStatus.Text = Strings.Get("Ui_fefa78faeb12") + ex.Message;
-            loading = false;
-            return;
+            var item = visible[i];
+            int existing = -1;
+            for (int j = i; j < messages.Count; j++) if (messages[j].Uid == item.Uid) { existing = j; break; }
+            if (existing < 0) messages.Insert(i, item);
+            else { messages[existing].SetSeen(item.IsSeen); messages[existing].HasAttachments = item.HasAttachments; if (existing != i) messages.Move(existing, i); }
         }
-        loading = false;
-        if (offset < total || total == 0) await LoadPageAsync();
-        else QueuePageCheck();
+        total = cached.Count; offset = visible.Count;
+        ListEmptyText.Visibility = total == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ListStatus.Text = string.Format(Strings.Get("Fmt_4f922a65014e"), total);
     }
     private async Task LoadPageAsync()
     {
@@ -388,11 +395,10 @@ public sealed partial class MainWindow : Window
         if (loading || offset >= total) { if (total == 0 && !loading) { ListEmptyText.Visibility = Visibility.Visible; ListStatus.Text = Strings.Get("Ui_a0035eea1f8f"); } return; }
         loading = true;
         pageLoadFailed = false;
-        bool pageLoaded = false;
         try
         {
             ListStatus.Text = Strings.Get("Ui_3eda0841ba56");
-            int count = Math.Max(15, (int)Math.Ceiling(MailList.ActualHeight / 70) + 2);
+            const int count = 15;
             await foreach (var item in mail.GetPageAsync(offset, count))
             {
                 if (closing) return;
@@ -403,16 +409,13 @@ public sealed partial class MainWindow : Window
                     ? string.Format(Strings.Get("Fmt_682976292efe"), messages.Count, total, mail.OfflineReason)
                     : string.Format(Strings.Get("Fmt_51affa73cdfd"), messages.Count, total);
             }
-            pageLoaded = true;
         }
         catch (Exception ex) { pageLoadFailed = true; if (!closing) ListStatus.Text = Strings.Get("Ui_e6d921116cbe") + ex.Message + Strings.Get("Ui_9d95de6992f8"); }
         finally { loading = false; }
-        if (pageLoaded) QueuePageCheck();
     }
     private void MailScroll_Loaded(object sender, RoutedEventArgs e)
     {
         listScroll = (ScrollViewer)sender;
-        QueuePageCheck();
     }
     private void QueuePageCheck(bool retry = false)
     {
@@ -422,18 +425,22 @@ public sealed partial class MainWindow : Window
         {
             pageCheckQueued = false;
             if (!closing && !aiSearchShowing && !loading && offset < total && listScroll != null &&
-                listScroll.VerticalOffset >= listScroll.ScrollableHeight - 150)
+                listScroll.VerticalOffset >= listScroll.ScrollableHeight - 0.5)
                 await LoadPageAsync();
         })) pageCheckQueued = false;
     }
-    private void MailList_Loaded(object sender, RoutedEventArgs e) => QueuePageCheck();
-    private void MailList_LayoutUpdated(object? sender, object e) => QueuePageCheck();
-    private void ListScroll_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e) => QueuePageCheck(retry: true);
-    private void MailList_SizeChanged(object sender, SizeChangedEventArgs e) => QueuePageCheck();
-    private void MailList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    private void MailList_Loaded(object sender, RoutedEventArgs e) { }
+    private void MailList_LayoutUpdated(object? sender, object e) { }
+    private void ListScroll_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
-        if (!args.InRecycleQueue && args.ItemIndex >= MailList.Items.Count - 3) QueuePageCheck();
+        if (sender is not ScrollViewer scroll) return;
+        double previous = lastMailScrollOffset;
+        lastMailScrollOffset = scroll.VerticalOffset;
+        if (scroll.ScrollableHeight > 0 && scroll.VerticalOffset > previous && scroll.VerticalOffset >= scroll.ScrollableHeight - 0.5)
+            QueuePageCheck(retry: true);
     }
+    private void MailList_SizeChanged(object sender, SizeChangedEventArgs e) { }
+    private void MailList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args) { }
     private async void MailList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (closing || MailList.SelectedItem is not MailItem item) return;
@@ -651,7 +658,7 @@ public sealed partial class MainWindow : Window
         if (AiSwitchThumb != null) AiSwitchThumb.Margin = new Thickness(enabled ? 14 : 2, 0, 0, 0);
         SearchBox.PlaceholderText = enabled ? Strings.Get("Ui_c00e4ef93416") : Strings.Get("Ui_7d5d4930a60f");
         if (enabled && !string.IsNullOrWhiteSpace(SearchBox.Text)) await StartAiSearchAsync();
-        else if (!enabled) { searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear(); AiSearchStatusPanel.Visibility = Visibility.Collapsed; ApplySearch(); QueuePageCheck(); }
+        else if (!enabled) { searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear(); AiSearchStatusPanel.Visibility = Visibility.Collapsed; ApplySearch(); }
     }
     private void AiSearchStop_Click(object sender, RoutedEventArgs e) => searchCancellation?.Cancel();
     private void ClearSearch_Click(object sender, RoutedEventArgs e)
@@ -660,7 +667,7 @@ public sealed partial class MainWindow : Window
         SearchBox.Text = "";
         SearchCalendar.SelectedDates.Clear(); searchDate = null;
         AiSearchStatusPanel.Visibility = Visibility.Collapsed;
-        ApplySearch(); QueuePageCheck();
+        ApplySearch();
     }
     private async Task StartAiSearchAsync()
     {
@@ -699,7 +706,7 @@ public sealed partial class MainWindow : Window
                     cancellation.Token.ThrowIfCancellationRequested();
                     if (matches)
                     {
-                        item.Importance = mail.CachedClassification(item, DecisionService.Fingerprint(settings, item)) ?? "";
+                        item.Importance = mail.CachedClassification(item, DecisionService.Fingerprint(settings, item, body)) ?? "";
                         aiResults.Add(item);
                         if (!searchDate.HasValue || (DateTime.TryParse(item.Date, out var date) && date.Date == searchDate.Value)) AddToDateGroup(item);
                     }
@@ -738,7 +745,9 @@ public sealed partial class MainWindow : Window
         while (index < dateGroups.Count && dateGroups[index].Order < order) index++;
         if (index < dateGroups.Count && dateGroups[index].Order == order) group = dateGroups[index];
         if (group == null) { group = new MailDateGroup(order, title); dateGroups.Insert(index, group); }
-        group.Add(item);
+        int position = 0;
+        while (position < group.Count && group[position].Uid > item.Uid) position++;
+        group.Insert(position, item);
     }
     private bool MatchesSearch(MailItem item)
     {
@@ -1417,7 +1426,7 @@ public sealed partial class MainWindow : Window
                     if (settings.Enabled)
                     {
                         error.Text = Strings.Get("Ui_7f7b8e27000f");
-                        await decision.ClassifyAsync(settings, new MailItem(0, "test@example.com", "Meeting tomorrow", "", "Please confirm your availability.", true));
+                        await decision.ClassifyAsync(settings, new MailItem(0, "test@example.com", "Meeting tomorrow", "", "Please confirm your availability.", true), "Please confirm your availability.");
                     }
                     decision.Save(settings);
                     UpdateAgentModelLabel();

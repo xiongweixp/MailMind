@@ -42,8 +42,11 @@ CREATE TABLE IF NOT EXISTS attachments (account TEXT NOT NULL, folder TEXT NOT N
     public void SaveFolders(string account, IReadOnlyList<MailFolderInfo> folders)
     {
         using var db = Open(); using var tx = db.BeginTransaction();
-        using var del = db.CreateCommand(); del.Transaction = tx; del.CommandText = "DELETE FROM folders WHERE account=$a"; del.Parameters.AddWithValue("$a",account); del.ExecuteNonQuery();
-        foreach (var folder in folders) { using var c = db.CreateCommand(); c.Transaction = tx; c.CommandText = "INSERT INTO folders(account,path,name,depth,selectable,validity) VALUES($a,$p,$n,$d,$s,COALESCE((SELECT MAX(validity) FROM messages WHERE account=$a AND folder=$p),0))"; c.Parameters.AddWithValue("$a",account); c.Parameters.AddWithValue("$p",folder.Path); c.Parameters.AddWithValue("$n",folder.Name); c.Parameters.AddWithValue("$d",folder.Depth); c.Parameters.AddWithValue("$s",folder.Selectable ? 1 : 0); c.ExecuteNonQuery(); }
+        using var paths = db.CreateCommand(); paths.Transaction = tx; paths.CommandText = "CREATE TEMP TABLE sync_folders (path TEXT PRIMARY KEY)"; paths.ExecuteNonQuery();
+        paths.CommandText = "INSERT INTO sync_folders VALUES ($p)"; var pathParameter = paths.Parameters.Add("$p", SqliteType.Text);
+        foreach (var folder in folders) { pathParameter.Value = folder.Path; paths.ExecuteNonQuery(); }
+        using var del = db.CreateCommand(); del.Transaction = tx; del.CommandText = "DELETE FROM folders WHERE account=$a AND path NOT IN (SELECT path FROM sync_folders)"; del.Parameters.AddWithValue("$a", account); del.ExecuteNonQuery();
+        foreach (var folder in folders) { using var c = db.CreateCommand(); c.Transaction = tx; c.CommandText = "INSERT INTO folders(account,path,name,depth,selectable,validity) VALUES($a,$p,$n,$d,$s,0) ON CONFLICT(account,path) DO UPDATE SET name=$n,depth=$d,selectable=$s"; c.Parameters.AddWithValue("$a",account); c.Parameters.AddWithValue("$p",folder.Path); c.Parameters.AddWithValue("$n",folder.Name); c.Parameters.AddWithValue("$d",folder.Depth); c.Parameters.AddWithValue("$s",folder.Selectable ? 1 : 0); c.ExecuteNonQuery(); }
         tx.Commit();
     }
     public List<MailFolderInfo> Folders(string account)
@@ -73,6 +76,22 @@ ORDER BY m.date DESC,m.folder,m.uid DESC LIMIT $limit OFFSET $offset";
         using var db=Open(); using var tx=db.BeginTransaction(); using var c=db.CreateCommand(); c.Transaction=tx; c.CommandText="DELETE FROM messages WHERE account=$a AND folder=$f AND validity<>$v; DELETE FROM attachments WHERE account=$a AND folder=$f AND validity<>$v; DELETE FROM attachment_sets WHERE account=$a AND folder=$f AND validity<>$v; DELETE FROM attachment_flags WHERE account=$a AND folder=$f AND validity<>$v; UPDATE folders SET validity=$v WHERE account=$a AND path=$f"; c.Parameters.AddWithValue("$a",account); c.Parameters.AddWithValue("$f",folder); c.Parameters.AddWithValue("$v",validity); c.ExecuteNonQuery(); tx.Commit();
     }
     public uint Validity(string account,string folder) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT validity FROM folders WHERE account=$a AND path=$f"; c.Parameters.AddWithValue("$a",account); c.Parameters.AddWithValue("$f",folder); return Convert.ToUInt32(c.ExecuteScalar() ?? 0); }
+    public void RemoveMissing(string account, string folder, uint validity, IReadOnlyCollection<uint> uids)
+    {
+        using var db = Open(); using var tx = db.BeginTransaction();
+        using var c = db.CreateCommand(); c.Transaction = tx;
+        c.CommandText = "CREATE TEMP TABLE sync_uids (uid INTEGER PRIMARY KEY)"; c.ExecuteNonQuery();
+        c.CommandText = "INSERT INTO sync_uids VALUES ($uid)"; var parameter = c.Parameters.Add("$uid", SqliteType.Integer);
+        foreach (var uid in uids) { parameter.Value = uid; c.ExecuteNonQuery(); }
+        c.Parameters.Clear(); c.Parameters.AddWithValue("$a", account); c.Parameters.AddWithValue("$f", folder); c.Parameters.AddWithValue("$v", validity);
+        foreach (var table in new[] { "messages", "attachments", "attachment_sets", "attachment_flags", "classifications" })
+        {
+            c.CommandText = $"DELETE FROM {table} WHERE account=$a AND folder=$f AND (validity<>$v OR uid NOT IN (SELECT uid FROM sync_uids))";
+            c.ExecuteNonQuery();
+        }
+        c.CommandText = "UPDATE folders SET validity=$v WHERE account=$a AND path=$f"; c.ExecuteNonQuery();
+        tx.Commit();
+    }
     public List<uint> Uids(string account,string folder,uint validity) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT uid FROM messages WHERE account=$a AND folder=$f AND validity=$v ORDER BY uid DESC"; c.Parameters.AddWithValue("$a",account); c.Parameters.AddWithValue("$f",folder); c.Parameters.AddWithValue("$v",validity); using var r=c.ExecuteReader(); var list=new List<uint>(); while(r.Read()) list.Add((uint)r.GetInt64(0)); return list; }
     public MailItem? Get(string account,string folder,uint validity,uint uid) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT sender,subject,date,preview,is_seen,(SELECT has_attachments FROM attachment_flags f WHERE f.account=messages.account AND f.folder=messages.folder AND f.validity=messages.validity AND f.uid=messages.uid) FROM messages WHERE account=$a AND folder=$f AND validity=$v AND uid=$u"; Key(c,account,folder,validity,uid); using var r=c.ExecuteReader(); return r.Read()?new MailItem(uid,r.GetString(0),r.GetString(1),r.GetString(2),r.GetString(3),r.IsDBNull(4) ? null : r.GetInt32(4) != 0) { HasAttachments = r.IsDBNull(5) ? null : r.GetInt32(5) != 0 }:null; }
     public void PutAttachmentFlag(MailItem item) { if (!item.HasAttachments.HasValue) return; using var db=Open(); using var c=db.CreateCommand(); Key(c,item.Account,item.Folder,item.Validity,item.Uid); c.CommandText="INSERT OR REPLACE INTO attachment_flags VALUES($a,$f,$v,$u,$h)"; c.Parameters.AddWithValue("$h",item.HasAttachments.Value ? 1 : 0); c.ExecuteNonQuery(); }
@@ -92,6 +111,13 @@ ORDER BY m.date DESC,m.folder,m.uid DESC LIMIT $limit OFFSET $offset";
         using var r = c.ExecuteReader(); var result = new List<MailAttachment>();
         while (r.Read()) result.Add(new(r.GetString(0), r.GetString(1), (byte[])r[2]));
         return result;
+    }
+    public bool HasAttachmentSet(MailItem item)
+    {
+        using var db = Open(); using var c = db.CreateCommand();
+        c.CommandText = "SELECT 1 FROM attachment_sets WHERE account=$a AND folder=$f AND validity=$v AND uid=$u";
+        Key(c, item.Account, item.Folder, item.Validity, item.Uid);
+        return c.ExecuteScalar() != null;
     }
     public void PutAttachments(MailItem item, IReadOnlyList<MailAttachment> attachments)
     {
