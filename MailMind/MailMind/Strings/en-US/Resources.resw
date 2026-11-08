@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+  <data name="L44525c2a4ff9.Text" xml:space="preserve"><value>MailMind</value></data>
+  <data name="L3bad90535a88.Text" xml:space="preserve"><value>Your AI mail assistant</value></data>
+  <data name="La02de73e09bb.Content" xml:space="preserve"><value>✎  Compose</value></data>
+  <data name="L0bcda26d6f5c.ToolTipService.ToolTip" xml:space="preserve"><value>Refresh</value></data>
+  <data name="L0bcda26d6f5c.AutomationProperties.Name" xml:space="preserve"><value>Refresh</value></data>
+  <data name="L90406df61d59.Text" xml:space="preserve"><value>No account added</value></data>
+  <data name="Ld1e43a452306.Text" xml:space="preserve"><value>No account connected</value></data>
+  <data name="L66318d2d0d82.Text" xml:space="preserve"><value>Contacts</value></data>
+  <data name="L725cc71ba3bb.Content" xml:space="preserve"><value>⚙   Settings</value></data>
+  <data name="Lae7b06edb77b.PlaceholderText" xml:space="preserve"><value>Search mail</value></data>
+  <data name="Lae7b06edb77b.AutomationProperties.Name" xml:space="preserve"><value>Search mail</value></data>
+  <data name="Lb94351cb1efa.ToolTipService.ToolTip" xml:space="preserve"><value>Filter loaded mail by date</value></data>
+  <data name="Lb94351cb1efa.AutomationProperties.Name" xml:space="preserve"><value>Filter mail by date</value></data>
+  <data name="L8a3036c006a9.Text" xml:space="preserve"><value>Select a date</value></data>
+  <data name="L1f8684d51d44.Content" xml:space="preserve"><value>Clear date filter</value></data>
+  <data name="L7cd256cac68b.ToolTipService.ToolTip" xml:space="preserve"><value>Toggle AI search; enter a question and press Enter</value></data>
+  <data name="L7cd256cac68b.AutomationProperties.Name" xml:space="preserve"><value>AI search</value></data>
+  <data name="L1778f3cd23b8.Content" xml:space="preserve"><value>Stop</value></data>
+  <data name="Lf1b4d186c522.Text" xml:space="preserve"><value>Inbox</value></data>
+  <data name="L2987cf05e0ad.Content" xml:space="preserve"><value>Clear filters</value></data>
+  <data name="L2987cf05e0ad.ToolTipService.ToolTip" xml:space="preserve"><value>Clear search and date filters</value></data>
+  <data name="L0b5c26237f13.Text" xml:space="preserve"><value>Connect an account to view mail</value></data>
+  <data name="L4c00ee6996de.ToolTipService.ToolTip" xml:space="preserve"><value>AI-assessed importance</value></data>
+  <data name="Lf08a6a599a4f.ToolTipService.ToolTip" xml:space="preserve"><value>Has attachments</value></data>
+  <data name="Lf08a6a599a4f.AutomationProperties.Name" xml:space="preserve"><value>Has attachments</value></data>
+  <data name="Le9933f78d0f2.Text" xml:space="preserve"><value>No mail yet</value></data>
+  <data name="L861a422842f2.AutomationProperties.Name" xml:space="preserve"><value>Reply</value></data>
+  <data name="L0ffb004c0179.Text" xml:space="preserve"><value>Reply</value></data>
+  <data name="L793550f6323d.AutomationProperties.Name" xml:space="preserve"><value>Reply all</value></data>
+  <data name="Lc987773d64f9.Text" xml:space="preserve"><value>Reply all</value></data>
+  <data name="Lece1b8807c68.AutomationProperties.Name" xml:space="preserve"><value>Forward</value></data>
+  <data name="L751d83f14167.Text" xml:space="preserve"><value>Forward</value></data>
+  <data name="L67a981656d96.AutomationProperties.Name" xml:space="preserve"><value>Delete</value></data>
+  <data name="L720036dcce9d.Text" xml:space="preserve"><value>Delete</value></data>
+  <data name="L157ef9938f13.Text" xml:space="preserve"><value>Select a message to read</value></data>
+  <data name="L7c728df48032.Content" xml:space="preserve"><value>✎  Compose</value></data>
+  <data name="L1affb920290a.Content" xml:space="preserve"><value>Details</value></data>
+  <data name="L319eb6acb5d3.ToolTipService.ToolTip" xml:space="preserve"><value>Preview attachment</value></data>
+  <data name="L60c188608951.AutomationProperties.Name" xml:space="preserve"><value>Attachment actions</value></data>
+  <data name="L60c188608951.ToolTipService.ToolTip" xml:space="preserve"><value>Attachment actions</value></data>
+  <data name="L58039391a993.ToolTipService.ToolTip" xml:space="preserve"><value>Back to message</value></data>
+  <data name="L58039391a993.AutomationProperties.Name" xml:space="preserve"><value>Back to message</value></data>
+  <data name="L49f42ddb850f.Content" xml:space="preserve"><value>Save as</value></data>
+  <data name="La937543b2f29.Content" xml:space="preserve"><value>➤ Send</value></data>
+  <data name="Ld905362c2852.Content" xml:space="preserve"><value>Save draft</value></data>
+  <data name="L07537b77adc5.Content" xml:space="preserve"><value>Discard</value></data>
+  <data name="L14ed52d17e36.Text" xml:space="preserve"><value>Add attachment</value></data>
+  <data name="L2f315b693052.Text" xml:space="preserve"><value>AI writing</value></data>
+  <data name="L31603271372c.Text" xml:space="preserve"><value>From</value></data>
+  <data name="L8cd484e0187e.PlaceholderText" xml:space="preserve"><value>Configure an account first</value></data>
+  <data name="L8cd484e0187e.AutomationProperties.Name" xml:space="preserve"><value>From</value></data>
+  <data name="L74cc7bd98bc1.Text" xml:space="preserve"><value>To</value></data>
+  <data name="L6f5f80aa622e.PlaceholderText" xml:space="preserve"><value>Enter email addresses</value></data>
+  <data name="L6f5f80aa622e.AutomationProperties.Name" xml:space="preserve"><value>To</value></data>
+  <data name="Lf2943979dbb5.Text" xml:space="preserve"><value>Cc</value></data>
+  <data name="L9730dbead4e0.PlaceholderText" xml:space="preserve"><value>Enter Cc addresses</value></data>
+  <data name="L9730dbead4e0.AutomationProperties.Name" xml:space="preserve"><value>Cc</value></data>
+  <data name="La1dbd72ab16b.Text" xml:space="preserve"><value>Subject</value></data>
+  <data name="L9e39db014f35.PlaceholderText" xml:space="preserve"><value>Add a subject</value></data>
+  <data name="L9e39db014f35.AutomationProperties.Name" xml:space="preserve"><value>Subject</value></data>
+  <data name="L9e05413a01ba.Text" xml:space="preserve"><value>Body</value></data>
+  <data name="L7fe7770999c5.PlaceholderText" xml:space="preserve"><value>Font</value></data>
+  <data name="L7fe7770999c5.AutomationProperties.Name" xml:space="preserve"><value>Font</value></data>
+  <data name="L6bc42b225024.PlaceholderText" xml:space="preserve"><value>Font size</value></data>
+  <data name="L6bc42b225024.AutomationProperties.Name" xml:space="preserve"><value>Font size</value></data>
+  <data name="L304b25effa82.ToolTipService.ToolTip" xml:space="preserve"><value>Bold</value></data>
+  <data name="L304b25effa82.AutomationProperties.Name" xml:space="preserve"><value>Bold</value></data>
+  <data name="Lfe9280a01a3c.ToolTipService.ToolTip" xml:space="preserve"><value>Italic</value></data>
+  <data name="Lfe9280a01a3c.AutomationProperties.Name" xml:space="preserve"><value>Italic</value></data>
+  <data name="L5d594060eadf.ToolTipService.ToolTip" xml:space="preserve"><value>Underline</value></data>
+  <data name="L5d594060eadf.AutomationProperties.Name" xml:space="preserve"><value>Underline</value></data>
+  <data name="L1295962af871.ToolTipService.ToolTip" xml:space="preserve"><value>Bulleted list</value></data>
+  <data name="L1295962af871.AutomationProperties.Name" xml:space="preserve"><value>Bulleted list</value></data>
+  <data name="Lc179acadf117.ToolTipService.ToolTip" xml:space="preserve"><value>Numbered list</value></data>
+  <data name="Lc179acadf117.AutomationProperties.Name" xml:space="preserve"><value>Numbered list</value></data>
+  <data name="L925b05478dc1.ToolTipService.ToolTip" xml:space="preserve"><value>Insert table</value></data>
+  <data name="L925b05478dc1.AutomationProperties.Name" xml:space="preserve"><value>Insert table</value></data>
+  <data name="L7e2871671432.ToolTipService.ToolTip" xml:space="preserve"><value>Align left</value></data>
+  <data name="L7e2871671432.AutomationProperties.Name" xml:space="preserve"><value>Align left</value></data>
+  <data name="L9052d0e98a39.ToolTipService.ToolTip" xml:space="preserve"><value>Align center</value></data>
+  <data name="L9052d0e98a39.AutomationProperties.Name" xml:space="preserve"><value>Align center</value></data>
+  <data name="Lc1ed28560e83.ToolTipService.ToolTip" xml:space="preserve"><value>Align right</value></data>
+  <data name="Lc1ed28560e83.AutomationProperties.Name" xml:space="preserve"><value>Align right</value></data>
+  <data name="L439b86bdf9f5.AutomationProperties.Name" xml:space="preserve"><value>Message body</value></data>
+  <data name="L73be9f028450.ToolTipService.ToolTip" xml:space="preserve"><value>Remove attachment</value></data>
+  <data name="L73be9f028450.AutomationProperties.Name" xml:space="preserve"><value>Remove attachment</value></data>
+  <data name="L32a8e1ee84df.Text" xml:space="preserve"><value>AI assistant</value></data>
+  <data name="L73aec99a4bc5.Text" xml:space="preserve"><value>Not configured</value></data>
+  <data name="L40b5ca3764cf.Text" xml:space="preserve"><value>Summarize</value></data>
+  <data name="L6e9796a58012.Text" xml:space="preserve"><value>Reply to mail</value></data>
+  <data name="L447ed8d1d3ac.Text" xml:space="preserve"><value>Ask me a question or let me draft an email.</value></data>
+  <data name="La11c4abd07cc.Text" xml:space="preserve"><value>The draft is ready. Send it?</value></data>
+  <data name="La42d8d54f036.Content" xml:space="preserve"><value>Send email</value></data>
+  <data name="L1736013b11b8.Content" xml:space="preserve"><value>Continue editing</value></data>
+  <data name="L6b73a12f408f.PlaceholderText" xml:space="preserve"><value>Enter a question or instruction...</value></data>
+  <data name="L7b0d0eebb32c.ToolTipService.ToolTip" xml:space="preserve"><value>Send to assistant</value></data>
+  <data name="L7b0d0eebb32c.AutomationProperties.Name" xml:space="preserve"><value>Send to assistant</value></data>
+  <data name="L4445a81b6b78.ToolTipService.ToolTip" xml:space="preserve"><value>Drag to resize columns</value></data>
+  <data name="L9ebe37008687.ToolTipService.ToolTip" xml:space="preserve"><value>Drag to resize columns</value></data>
+  <data name="L9364ef5d02fb.ToolTipService.ToolTip" xml:space="preserve"><value>Drag to resize columns</value></data>
+  <data name="Lcc193a97719a.ToolTipService.ToolTip" xml:space="preserve"><value>Collapse AI assistant</value></data>
+  <data name="Lcc193a97719a.AutomationProperties.Name" xml:space="preserve"><value>Collapse AI assistant</value></data>
+  <data name="L9ef7d87a1e35.ToolTipService.ToolTip" xml:space="preserve"><value>Open AI assistant</value></data>
+  <data name="L9ef7d87a1e35.AutomationProperties.Name" xml:space="preserve"><value>Open AI assistant</value></data>
+  <data name="FontYaHei.Content" xml:space="preserve"><value>Microsoft YaHei</value></data>
+  <data name="FontSimSun.Content" xml:space="preserve"><value>SimSun</value></data>
+  <data name="FontSimHei.Content" xml:space="preserve"><value>SimHei</value></data>
+  <data name="FontDengXian.Content" xml:space="preserve"><value>DengXian</value></data>
+</root>

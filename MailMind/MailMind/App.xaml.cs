@@ -34,6 +34,7 @@ namespace MailMind
         /// </summary>
         public App()
         {
+            Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = Strings.LanguageTag;
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
             // MIME headers without a declared charset are common in older Chinese mail.
             MimeKit.ParserOptions.Default.CharsetEncoding = System.Text.Encoding.GetEncoding("GB18030");

@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+  <data name="DateUnknown" xml:space="preserve"><value>日期未知</value></data>
+  <data name="Today" xml:space="preserve"><value>今天</value></data>
+  <data name="DaysAgo" xml:space="preserve"><value>一天前</value></data>
+  <data name="WeekAgo" xml:space="preserve"><value>一周前</value></data>
+  <data name="Older" xml:space="preserve"><value>更早前</value></data>
+  <data name="Contact_42b013f6a361" xml:space="preserve"><value>搜索姓名或邮箱</value></data>
+  <data name="Contact_9070cb0eb695" xml:space="preserve"><value>通讯录</value></data>
+  <data name="Contact_163297d713b7" xml:space="preserve"><value>+  新增联系人</value></data>
+  <data name="Contact_77912c43b1e9" xml:space="preserve"><value>从邮件导入</value></data>
+  <data name="Contact_75c33f5c2ecc" xml:space="preserve"><value>导入完成</value></data>
+  <data name="Contact_cb63c62e50f8" xml:space="preserve"><value>知道了</value></data>
+  <data name="Contact_a01a8d53938f" xml:space="preserve"><value>导入失败</value></data>
+  <data name="Contact_93362321e1bb" xml:space="preserve"><value>全部联系人</value></data>
+  <data name="Contact_d33caa10efe3" xml:space="preserve"><value>请输入联系人姓名或邮箱。</value></data>
+  <data name="Contact_78fdf87306a8" xml:space="preserve"><value>选择联系人查看详情</value></data>
+  <data name="Contact_a7f814c0a40d" xml:space="preserve"><value>编辑</value></data>
+  <data name="Contact_29558466833b" xml:space="preserve"><value>发邮件</value></data>
+  <data name="Contact_3755f56f2f83" xml:space="preserve"><value>删除</value></data>
+  <data name="Contact_74cff4c9e39b" xml:space="preserve"><value>删除联系人？</value></data>
+  <data name="Contact_4d0b4688c787" xml:space="preserve"><value>取消</value></data>
+  <data name="Contact_b0df5c459f31" xml:space="preserve"><value>联系信息</value></data>
+  <data name="Contact_9ed627bcf63d" xml:space="preserve"><value>邮箱</value></data>
+  <data name="Contact_f39c6b629f80" xml:space="preserve"><value>电话</value></data>
+  <data name="Contact_5d80806d7f55" xml:space="preserve"><value>公司</value></data>
+  <data name="Contact_e0361480e3a5" xml:space="preserve"><value>备注</value></data>
+  <data name="Contact_02b5d33f3897" xml:space="preserve"><value>最近往来</value></data>
+  <data name="Contact_ed2172fd7894" xml:space="preserve"><value>查看全部</value></data>
+  <data name="Contact_a00575679ceb" xml:space="preserve"><value>本地缓存中暂无该联系人的来信</value></data>
+  <data name="Contact_be4c2616b177" xml:space="preserve"><value>姓名</value></data>
+  <data name="Contact_91061a56c00f" xml:space="preserve"><value>部门</value></data>
+  <data name="Contact_a2a92e50a114" xml:space="preserve"><value>职位</value></data>
+  <data name="Contact_fadf24dbc5a9" xml:space="preserve"><value>保存</value></data>
+  <data name="Contact_3b303cde8823" xml:space="preserve"><value>请填写姓名和有效的邮箱地址。</value></data>
+  <data name="Contact_d2b8c0e173d6" xml:space="preserve"><value>该邮箱已存在。</value></data>
+  <data name="Contact_b12163000cd3" xml:space="preserve"><value>保存失败：</value></data>
+  <data name="Contact_42635ed1f6f1" xml:space="preserve"><value>已从本地邮件缓存新增 {0} 位联系人。已有联系人资料保持不变。</value></data>
+  <data name="Contact_0464af7ccbfe" xml:space="preserve"><value>共 {0} 位联系人</value></data>
+  <data name="Contact_11e0c9499eda" xml:space="preserve"><value>确定删除 {0}？</value></data>
+  <data name="Ui_a9e33d11fbc3" xml:space="preserve"><value>读取账户失败：</value></data>
+  <data name="Ui_2a353cb3737f" xml:space="preserve"><value>读取 AI 分类缓存失败：</value></data>
+  <data name="Ui_4dcbbcfa6154" xml:space="preserve"><value>排队中</value></data>
+  <data name="Ui_5ecd3061a820" xml:space="preserve"><value>判断中</value></data>
+  <data name="Ui_5dabce6dc197" xml:space="preserve"><value>AI 分类失败：</value></data>
+  <data name="Ui_ef40431c5873" xml:space="preserve"><value>正在写邮件</value></data>
+  <data name="Ui_9b64d64a01dd" xml:space="preserve"><value>请先关闭写信区，再打开通讯录。</value></data>
+  <data name="Ui_3cb935e8e9f3" xml:space="preserve"><value>请先关闭写信区，再打开邮件。</value></data>
+  <data name="Ui_a3fd78a0f65e" xml:space="preserve"><value>无法打开邮件</value></data>
+  <data name="Ui_8620ccddedca" xml:space="preserve"><value>这封邮件属于其他邮箱，请先切换到对应邮箱。</value></data>
+  <data name="Ui_3667cb105a26" xml:space="preserve"><value>正在加载</value></data>
+  <data name="Ui_46aee0137ba8" xml:space="preserve"><value>请等待邮件加载完成后重试。</value></data>
+  <data name="Ui_fe4e4469d8d3" xml:space="preserve"><value>邮件可能已被删除、移走或尚未加载，请刷新后重试。</value></data>
+  <data name="Ui_d74eefd17e94" xml:space="preserve"><value>正在同步目录…</value></data>
+  <data name="Ui_c76fd62d5450" xml:space="preserve"><value>服务器没有返回收件箱</value></data>
+  <data name="Ui_01cfb10ae247" xml:space="preserve"><value>目录同步失败，显示本地目录：</value></data>
+  <data name="Ui_77b89d0d2434" xml:space="preserve"><value>目录同步失败：</value></data>
+  <data name="Ui_67c7dec77218" xml:space="preserve"><value>自动同步失败，将重试：</value></data>
+  <data name="Ui_c60d0371ae5e" xml:space="preserve"><value>请先配置邮箱</value></data>
+  <data name="Ui_62d8dbdd1c84" xml:space="preserve"><value>正在连接邮箱…</value></data>
+  <data name="Ui_fefa78faeb12" xml:space="preserve"><value>同步失败，显示本地缓存：</value></data>
+  <data name="Ui_a0035eea1f8f" xml:space="preserve"><value>没有邮件</value></data>
+  <data name="Ui_3eda0841ba56" xml:space="preserve"><value>正在加载邮件…</value></data>
+  <data name="Ui_e6d921116cbe" xml:space="preserve"><value>加载失败：</value></data>
+  <data name="Ui_9d95de6992f8" xml:space="preserve"><value>，滚动可重试</value></data>
+  <data name="Ui_a9dcdf1cff33" xml:space="preserve"><value>发件人：</value></data>
+  <data name="Ui_32d77333df9b" xml:space="preserve"><value>时间：</value></data>
+  <data name="Ui_db0f470d714c" xml:space="preserve"><value>主题：</value></data>
+  <data name="Ui_27d61c40ca03" xml:space="preserve"><value>收件人：正在加载…</value></data>
+  <data name="Ui_0b1b181a2d92" xml:space="preserve"><value>抄送：正在加载…</value></data>
+  <data name="Ui_4f55ee1e687f" xml:space="preserve"><value>详情</value></data>
+  <data name="Ui_2119329e9dd5" xml:space="preserve"><value>正在加载正文…</value></data>
+  <data name="Ui_c16dba311cc6" xml:space="preserve"><value>加载正文失败：</value></data>
+  <data name="Ui_b6c64fabc3cd" xml:space="preserve"><value>附件加载失败：</value></data>
+  <data name="Ui_5308314f875c" xml:space="preserve"><value>收件人：</value></data>
+  <data name="Ui_071fb244eae7" xml:space="preserve"><value>未提供</value></data>
+  <data name="Ui_b5c1a71479c0" xml:space="preserve"><value>抄送：</value></data>
+  <data name="Ui_74a5c76dadc1" xml:space="preserve"><value>收件人：无法加载</value></data>
+  <data name="Ui_2f4acafcacf0" xml:space="preserve"><value>抄送：无法加载</value></data>
+  <data name="Ui_5d5815647c76" xml:space="preserve"><value>收起</value></data>
+  <data name="Ui_3117effd0182" xml:space="preserve"><value>正在加载预览…</value></data>
+  <data name="Ui_95f45453c3a1" xml:space="preserve"><value>预览区域尚未完成布局，请返回邮件后重试。</value></data>
+  <data name="Ui_ec7a12771f38" xml:space="preserve"><value>无法预览此附件：</value></data>
+  <data name="Ui_a6b66b96055b" xml:space="preserve"><value>保存附件失败</value></data>
+  <data name="Ui_65fc81e16119" xml:space="preserve"><value>打开</value></data>
+  <data name="Ui_a86b5bd5da40" xml:space="preserve"><value>另存为</value></data>
+  <data name="Ui_d93449b95ad7" xml:space="preserve"><value>打开附件失败</value></data>
+  <data name="Ui_cfbd8c7e1166" xml:space="preserve"><value>没有可用于打开此文件的默认应用。</value></data>
+  <data name="Ui_d0fdba350302" xml:space="preserve"><value>已读状态同步失败，请重新选择邮件重试：</value></data>
+  <data name="Ui_aa3098a5a0ef" xml:space="preserve"><value>按回车开始 AI 搜索（本地缓存）</value></data>
+  <data name="Ui_c00e4ef93416" xml:space="preserve"><value>输入问题，按回车搜索</value></data>
+  <data name="Ui_7d5d4930a60f" xml:space="preserve"><value>搜索邮件</value></data>
+  <data name="Ui_908e1f3f6085" xml:space="preserve"><value>输入搜索问题后按回车。</value></data>
+  <data name="Ui_de6d93b1d134" xml:space="preserve"><value>AI 搜索失败：</value></data>
+  <data name="Ui_587aab794b84" xml:space="preserve"><value>按日期筛选已加载邮件</value></data>
+  <data name="Ui_5341ec296262" xml:space="preserve"><value>AI 助手</value></data>
+  <data name="Ui_bcc347f5ce36" xml:space="preserve"><value>思考过程</value></data>
+  <data name="Ui_138d5364bb0b" xml:space="preserve"><value>思考中</value></data>
+  <data name="Ui_63595e95b708" xml:space="preserve"><value>未配置</value></data>
+  <data name="Ui_d7969271e099" xml:space="preserve"><value> · 本机</value></data>
+  <data name="Ui_5630b886f9cd" xml:space="preserve"><value>你</value></data>
+  <data name="Ui_6568a0ab4946" xml:space="preserve"><value>请告诉我更多细节。</value></data>
+  <data name="Ui_dc52d35e8299" xml:space="preserve"><value>无法完成：</value></data>
+  <data name="Ui_571ef1449bd3" xml:space="preserve"><value>当前没有可编辑的邮件草稿。</value></data>
+  <data name="Ui_0ff5087678d2" xml:space="preserve"><value>草稿在读取时发生变化，请重试。</value></data>
+  <data name="Ui_5ae31f43f796" xml:space="preserve"><value>请先配置邮箱。</value></data>
+  <data name="Ui_682bf9440877" xml:space="preserve"><value>本地缓存</value></data>
+  <data name="Ui_54a202327084" xml:space="preserve"><value>请先选择要读取的邮件。</value></data>
+  <data name="Ui_fbc3a92e5aeb" xml:space="preserve"><value>邮件或写信状态已改变，请重试。</value></data>
+  <data name="Ui_045641504389" xml:space="preserve"><value>正文编辑器尚未准备好。</value></data>
+  <data name="Ui_486881925a2e" xml:space="preserve"><value>正文编辑器加载失败。</value></data>
+  <data name="Ui_a536f34e2176" xml:space="preserve"><value>无法打开正文编辑器</value></data>
+  <data name="Ui_792a35738a70" xml:space="preserve"><value>无法回复邮件</value></data>
+  <data name="Ui_0efdb1f0b8f3" xml:space="preserve"><value>关闭写信？</value></data>
+  <data name="Ui_f4694e9308ee" xml:space="preserve"><value>邮件内容尚未保存。关闭后内容会丢失。</value></data>
+  <data name="Ui_3a481bc7646e" xml:space="preserve"><value>继续编辑</value></data>
+  <data name="Ui_ea4899468cae" xml:space="preserve"><value>丢弃</value></data>
+  <data name="Ui_1072053d35d5" xml:space="preserve"><value>添加附件失败</value></data>
+  <data name="Ui_b8a7f8051bc9" xml:space="preserve"><value>AI 帮我写</value></data>
+  <data name="Ui_8c72e6ffa111" xml:space="preserve"><value>AI 写作功能尚未接入。</value></data>
+  <data name="Ui_4d6e7909477a" xml:space="preserve"><value>邮件发送中</value></data>
+  <data name="Ui_0c7c05ad53d5" xml:space="preserve"><value>邮件发送成功</value></data>
+  <data name="Ui_364a32f32cf2" xml:space="preserve"><value>邮件已发送，但清理编辑区失败，请勿重复发送。</value></data>
+  <data name="Ui_debd3a7cc7af" xml:space="preserve"><value>发送失败：</value></data>
+  <data name="Ui_0ab81810ba33" xml:space="preserve"><value>。点击写邮件可继续编辑。</value></data>
+  <data name="Ui_b13ddae6cbad" xml:space="preserve"><value>邮箱地址</value></data>
+  <data name="Ui_e9fe4dd6cc42" xml:space="preserve"><value>登录用户名</value></data>
+  <data name="Ui_dabfb7535cc5" xml:space="preserve"><value>通常与邮箱地址相同</value></data>
+  <data name="Ui_32503cb354f7" xml:space="preserve"><value>IMAP 服务器</value></data>
+  <data name="Ui_6cbb7335b5b5" xml:space="preserve"><value>端口</value></data>
+  <data name="Ui_1bf58fe6b7f5" xml:space="preserve"><value>使用 SSL/TLS</value></data>
+  <data name="Ui_941346a5f455" xml:space="preserve"><value>SMTP 服务器</value></data>
+  <data name="Ui_656521c4ea6f" xml:space="preserve"><value>SMTP 端口</value></data>
+  <data name="Ui_e63f130046f4" xml:space="preserve"><value>密码或邮箱授权码</value></data>
+  <data name="Ui_c53b1b5a1719" xml:space="preserve"><value>请输入授权码</value></data>
+  <data name="Ui_1a866ebd4df9" xml:space="preserve"><value>收发服务器</value></data>
+  <data name="Ui_9f7d652cf2ce" xml:space="preserve"><value>配置邮箱账户及服务器。保存时测试 IMAP 连接；发送邮件时使用 SMTP 设置。</value></data>
+  <data name="Ui_2d980c4eb4f6" xml:space="preserve"><value>接收邮件 · IMAP</value></data>
+  <data name="Ui_07edb49543ea" xml:space="preserve"><value>发送邮件 · SMTP</value></data>
+  <data name="Ui_a7836c9c9281" xml:space="preserve"><value>AI 服务</value></data>
+  <data name="Ui_b234d4ad9635" xml:space="preserve"><value>判断模型（Decision）</value></data>
+  <data name="Ui_482ffd920224" xml:space="preserve"><value>生成模型（用于后续总结和写作）</value></data>
+  <data name="Ui_9612b1d325da" xml:space="preserve"><value>自我介绍</value></data>
+  <data name="Ui_38ef3ea7df8d" xml:space="preserve"><value>例如：我是产品经理，关注项目进度、客户反馈和安全问题。</value></data>
+  <data name="Ui_fa199b22e631" xml:space="preserve"><value>刷新模型列表</value></data>
+  <data name="Ui_c80ff00b48ae" xml:space="preserve"><value>请输入有效端口。</value></data>
+  <data name="Ui_b66432e5ffb0" xml:space="preserve"><value>正在获取模型列表…</value></data>
+  <data name="Ui_90a2379b7c07" xml:space="preserve"><value>获取模型失败：</value></data>
+  <data name="Ui_cc02bd1d65c6" xml:space="preserve"><value>为加载的邮件自动判断重要性</value></data>
+  <data name="Ui_1c623b0d00bf" xml:space="preserve"><value>重新标记当前文件夹已加载的邮件</value></data>
+  <data name="Ui_a9d73061c250" xml:space="preserve"><value>AI 设置</value></data>
+  <data name="Ui_da5402b2a1dc" xml:space="preserve"><value>判断模型用于重要性标记和 AI 搜索。个人介绍帮助 AI 理解你的角色与关注点。</value></data>
+  <data name="Ui_847fc8062342" xml:space="preserve"><value>测试并保存</value></data>
+  <data name="Ui_fadf24dbc5a9" xml:space="preserve"><value>保存</value></data>
+  <data name="Ui_4d0b4688c787" xml:space="preserve"><value>取消</value></data>
+  <data name="Ui_7debf9cb0372" xml:space="preserve"><value>设置</value></data>
+  <data name="Ui_581f3e8a08c2" xml:space="preserve"><value>请先保存并启用 AI 重要性判断。</value></data>
+  <data name="Ui_10118cb066b5" xml:space="preserve"><value>请填写有效端口并选择判断模型。</value></data>
+  <data name="Ui_7f7b8e27000f" xml:space="preserve"><value>正在测试模型…</value></data>
+  <data name="Ui_793a10b4940d" xml:space="preserve"><value>请填写邮箱、服务器、有效端口和密码或授权码。</value></data>
+  <data name="Ui_83d6267aa522" xml:space="preserve"><value>请输入有效的 SMTP 端口。</value></data>
+  <data name="Ui_0c2a21faf748" xml:space="preserve"><value>正在测试连接…</value></data>
+  <data name="Ui_a43d8b375652" xml:space="preserve"><value>连接或保存失败：</value></data>
+  <data name="Ui_cb63c62e50f8" xml:space="preserve"><value>知道了</value></data>
+  <data name="FolderInbox" xml:space="preserve"><value>收件箱</value></data>
+  <data name="FolderSent" xml:space="preserve"><value>已发送</value></data>
+  <data name="FolderDrafts" xml:space="preserve"><value>草稿箱</value></data>
+  <data name="FolderDeleted" xml:space="preserve"><value>已删除</value></data>
+  <data name="FolderJunk" xml:space="preserve"><value>垃圾邮件</value></data>
+  <data name="FolderArchive" xml:space="preserve"><value>归档</value></data>
+  <data name="ImportanceHigh" xml:space="preserve"><value>重要</value></data>
+  <data name="ImportanceNormal" xml:space="preserve"><value>一般</value></data>
+  <data name="ImportanceLow" xml:space="preserve"><value>可忽略</value></data>
+  <data name="ImportanceFailed" xml:space="preserve"><value>失败</value></data>
+  <data name="More_49deaf7da20d" xml:space="preserve"><value>文件</value></data>
+  <data name="More_5ae31f43f796" xml:space="preserve"><value>请先配置邮箱。</value></data>
+  <data name="More_c4bfac5f682f" xml:space="preserve"><value>邮箱账户或授权码不可用，请重新配置邮箱。</value></data>
+  <data name="More_2c207ab6b221" xml:space="preserve"><value>请先在设置中配置 SMTP 服务器和端口。</value></data>
+  <data name="More_6a66c747edcb" xml:space="preserve"><value>请输入有效的收件人地址，多个地址用逗号分隔。</value></data>
+  <data name="More_87b629422272" xml:space="preserve"><value>请输入有效的抄送地址，多个地址用逗号分隔。</value></data>
+  <data name="More_8b42227ca4a1" xml:space="preserve"><value>IMAP 登录超时，请检查网络和邮箱服务器状态。</value></data>
+  <data name="More_9cf8aaefb0c2" xml:space="preserve"><value>请先配置邮箱和授权码。</value></data>
+  <data name="More_7591f45427c7" xml:space="preserve"><value>邮箱服务器读取目录列表超时，请稍后点击左侧刷新重试。</value></data>
+  <data name="More_1ab279dc6512" xml:space="preserve"><value>服务器目录已重建，请重新打开目录。</value></data>
+  <data name="More_1cc645d7a525" xml:space="preserve"><value>未知发件人</value></data>
+  <data name="More_dd6026e30d48" xml:space="preserve"><value>(无主题)</value></data>
+  <data name="More_10bee1228539" xml:space="preserve"><value>无法连接邮件账户获取正文。</value></data>
+  <data name="More_76be3e92a26f" xml:space="preserve"><value>无法连接邮件账户获取回复信息。</value></data>
+  <data name="More_b8cb72e2c4e2" xml:space="preserve"><value>原邮件没有可用的回复地址。</value></data>
+  <data name="More_96055ce0ed7d" xml:space="preserve"><value>无法连接邮件账户获取收件人。</value></data>
+  <data name="More_e0702ff2cb5e" xml:space="preserve"><value>请先选择目录。</value></data>
+  <data name="More_38ca211767ce" xml:space="preserve"><value>(无正文)</value></data>
+  <data name="More_2c067f642cdc" xml:space="preserve"><value>无法连接邮件账户获取附件。</value></data>
+  <data name="More_99f6fe6c41ad" xml:space="preserve"><value>附件</value></data>
+  <data name="More_81592e481edb" xml:space="preserve"><value>邮件附件.eml</value></data>
+  <data name="More_e8dc9306cda8" xml:space="preserve"><value>服务器未允许修改此目录的邮件状态。</value></data>
+  <data name="More_791c29dbb42e" xml:space="preserve"><value>服务器未确认邮件已读，邮件可能已被删除或移动。</value></data>
+  <data name="More_9c718678dedd" xml:space="preserve"><value>此附件类型不允许预览，请使用另存为。</value></data>
+  <data name="More_f76ea878382e" xml:space="preserve"><value>系统未安装此格式的预览处理程序，请使用另存为。</value></data>
+  <data name="More_ce2072231a75" xml:space="preserve"><value>无法创建系统预览处理程序。</value></data>
+  <data name="More_540b07df5820" xml:space="preserve"><value>系统预览处理程序不支持此附件。</value></data>
+  <data name="More_38251c874604" xml:space="preserve"><value>模型未返回有效搜索结果</value></data>
+  <data name="More_c866fc93cafc" xml:space="preserve"><value>AI 搜索输入超过模型的批处理限制，请增大模型的 physical batch size。</value></data>
+  <data name="More_8f42af3f9dee" xml:space="preserve"><value>AI 输入超过模型的批处理限制，请增大模型的 physical batch size。</value></data>
+  <data name="More_efcf56ef08c1" xml:space="preserve"><value>模型未返回有效分类</value></data>
+  <data name="More_cad26bc0d928" xml:space="preserve"><value>请先在设置中选择生成模型。</value></data>
+  <data name="More_1c949c60bcdc" xml:space="preserve"><value>模型未返回有效答复，请重试或更换生成模型。</value></data>
+  <data name="More_ace1c7c8e253" xml:space="preserve"><value>草稿已创建</value></data>
+  <data name="More_ba9c8c4123aa" xml:space="preserve"><value>草稿已更新</value></data>
+  <data name="More_bc39e8c9de1b" xml:space="preserve"><value>，尚未发送。助手未能生成后续答复，请检查草稿。</value></data>
+  <data name="More_5b895f1fa36d" xml:space="preserve"><value>助手的工具调用次数过多，请重试。</value></data>
+  <data name="More_6cc08f2497ee" xml:space="preserve"><value>AI 流式请求失败：</value></data>
+  <data name="More_7b012904b99f" xml:space="preserve"><value>模型输出被截断，请重试或增大模型输出长度。</value></data>
+  <data name="More_44675afdc085" xml:space="preserve"><value>AI 流式连接中断，请重试。</value></data>
+  <data name="More_f4f5fcbf5f82" xml:space="preserve"><value>模型未完成思考输出。</value></data>
+  <data name="More_c593b886a49d" xml:space="preserve"><value>模型请求了不支持的操作。</value></data>
+  <data name="More_5cffbb5128d2" xml:space="preserve"><value>模型请求了不支持的操作。 </value></data>
+  <data name="More_694f2fb3269c" xml:space="preserve"><value>模型工具参数格式无效。</value></data>
+  <data name="More_10ac3f0caad7" xml:space="preserve"><value>模型工具调用格式无效。</value></data>
+  <data name="More_a22693d9e0e4" xml:space="preserve"><value>模型没有返回答复。</value></data>
+  <data name="More_edde1f2158e8" xml:space="preserve"><value>模型返回的 JSON 不包含助手结果。</value></data>
+  <data name="More_389b6373e09a" xml:space="preserve"><value>草稿已更新，尚未发送。助手的后续回复失败，请检查草稿：</value></data>
+  <data name="More_5830bb38881f" xml:space="preserve"><value>邮件链接无效或已过期，请重新查询。</value></data>
+  <data name="More_d1541f2f9e11" xml:space="preserve"><value>邮件已不在当前有效缓存中，请重新查询。</value></data>
+  <data name="More_8cd86b61e2f0" xml:space="preserve"><value>选中的邮件已改变，请重新提出请求。</value></data>
+  <data name="More_c2ddbf9383c3" xml:space="preserve"><value>请总结当前选中的邮件，列出重点和需要采取的行动。</value></data>
+  <data name="More_bd2f7f61d721" xml:space="preserve"><value>请帮我回复这封邮件。</value></data>
+  <data name="More_c5eefec9d2df" xml:space="preserve"><value>此操作只支持读取邮件。</value></data>
+  <data name="More_346a9dc82d60" xml:space="preserve"><value>模型未返回有效的回复正文，请重试。</value></data>
+  <data name="More_2028494e3a97" xml:space="preserve"><value>已在回复界面填入草稿，请检查后发送。</value></data>
+  <data name="More_94d70561872e" xml:space="preserve"><value>写邮件操作正在进行，请稍后重试。</value></data>
+  <data name="More_d6e91e01c05c" xml:space="preserve"><value>写邮件界面已有内容，请先处理当前草稿，再让助手创建新草稿。</value></data>
+  <data name="More_55224022ad03" xml:space="preserve"><value>选择表格大小（最多 10 × 10）</value></data>
+  <data name="More_b6546a4db7e1" xml:space="preserve"><value>smtp.example.com（可稍后填写）</value></data>
+  <data name="Fmt_9c3ab1d552d3" xml:space="preserve"><value>附件（{0}）</value></data>
+  <data name="Fmt_b3c9b1921f64" xml:space="preserve"><value>附件（{0}）</value></data>
+  <data name="Fmt_4f922a65014e" xml:space="preserve"><value>本地缓存：{0} 封 · 正在同步…</value></data>
+  <data name="Fmt_682976292efe" xml:space="preserve"><value>离线缓存：已加载 {0} / {1} 封。连接失败：{2}</value></data>
+  <data name="Fmt_51affa73cdfd" xml:space="preserve"><value>已加载 {0} / {1} 封</value></data>
+  <data name="Fmt_512c06f73ef0" xml:space="preserve"><value>AI 搜索中 · 本地缓存 0/{0} · 匹配 0</value></data>
+  <data name="Fmt_d014a09ccbde" xml:space="preserve"><value>AI 搜索中 · 本地缓存 {0}/{1} · 匹配 {2}</value></data>
+  <data name="Fmt_c07cb2f4604c" xml:space="preserve"><value>AI 搜索完成 · 本地邮件索引 {0}/{1} · 匹配 {2}</value></data>
+  <data name="Fmt_03ab50ece31b" xml:space="preserve"><value> · 失败 {0}</value></data>
+  <data name="Fmt_e13d73cd0374" xml:space="preserve"><value> · 正文获取或判断失败 {0}</value></data>
+  <data name="Fmt_459e55897a4a" xml:space="preserve"><value>AI 搜索已中止 · 匹配 {0}（本地缓存）</value></data>
+  <data name="Fmt_4e5f0d08014a" xml:space="preserve"><value>日期：{0:yyyy-MM-dd}（仅已加载邮件）</value></data>
+  <data name="Fmt_1fdcb76706ab" xml:space="preserve"><value>{0} 必须是字符串。</value></data>
+  <data name="Fmt_8f9728c18b2c" xml:space="preserve"><value>{0} 必须是字符串。</value></data>
+  <data name="Fmt_82bb166a44ab" xml:space="preserve"><value>{0} 过长。</value></data>
+  <data name="Fmt_dc844c6a6503" xml:space="preserve"><value>{0}，{1} 写道：</value></data>
+  <data name="Fmt_580e68a76a42" xml:space="preserve"><value>{0} 列 × {1} 行</value></data>
+  <data name="Fmt_42ce4d591e3e" xml:space="preserve"><value>{0} 列 {1} 行</value></data>
+  <data name="Fmt_71963e091707" xml:space="preserve"><value>无法读取文件：{0}</value></data>
+  <data name="Fmt_c5a7c143ddeb" xml:space="preserve"><value>发现 {0} 个判断模型、{1} 个生成模型。</value></data>
+  <data name="Fmt_2803a43bd7a7" xml:space="preserve"><value>正在重新标记 {0}/{1}…</value></data>
+  <data name="Fmt_99bc0ca14c3a" xml:space="preserve"><value>重新标记完成，共 {0} 封；失败的邮件会显示“失败”。</value></data>
+  <data name="Fmt_9e6ea7a754b7" xml:space="preserve"><value>连接 IMAP 服务器 {0}:{1} 超时，请检查网络、服务器地址和端口。</value></data>
+  <data name="Fmt_ce6690dbc149" xml:space="preserve"><value>服务器报告 {0} 封邮件，但只返回 {1} 个邮件标识，请检查邮箱的 IMAP 同步范围设置。</value></data>
+  <data name="Fmt_1b6657f3e74c" xml:space="preserve"><value>SystemOne 请求失败 ({0}): {1}</value></data>
+  <data name="Fmt_e41b6588edc3" xml:space="preserve"><value>AI 请求失败 ({0}): {1}</value></data>
+  <data name="Fmt_ef1bea6eed7b" xml:space="preserve"><value>模型返回的 JSON 格式无效（行 {0}，字节 {1}）：{2}</value></data>
+  <data name="Last_d5ee5d8c0b6c" xml:space="preserve"><value>（按邮件内容判断）</value></data>
+  <data name="Last_e3a8aeee5032" xml:space="preserve"><value>工具参数必须是对象。</value></data>
+  <data name="Last_331a788bdc38" xml:space="preserve"><value>日期必须为 YYYY-MM-DD 格式。</value></data>
+  <data name="Last_02d82f5d57d4" xml:space="preserve"><value>开始日期不能晚于结束日期。</value></data>
+  <data name="Last_af741a960aa2" xml:space="preserve"><value>当前邮箱本地缓存，可能不完整；关键词只匹配发件人、主题和摘要</value></data>
+  <data name="Last_8e516be6aa62" xml:space="preserve"><value>邮件标识无效或已过期，请重新搜索。</value></data>
+  <data name="Last_5481ef8e6033" xml:space="preserve"><value>邮件不在当前账户的有效缓存中，请重新搜索。</value></data>
+  <data name="Last_8732a7b0a55c" xml:space="preserve"><value>账户或邮件缓存已改变，请重新搜索。</value></data>
+  <data name="Last_180eb12300c8" xml:space="preserve"><value>正文偏移超出范围。</value></data>
+  <data name="Last_de048b6e5b7f" xml:space="preserve"><value>请提供要查询的联系人姓名或邮箱。</value></data>
+  <data name="Last_4edc0a66e484" xml:space="preserve"><value>邮件草稿无效。</value></data>
+  <data name="Last_11e1a4a971e3" xml:space="preserve"><value>草稿已打开并填入，尚未发送。</value></data>
+  <data name="Last_3cc15e1e3d10" xml:space="preserve"><value>请先重新读取当前草稿；草稿可能已被更改。</value></data>
+  <data name="Last_5fdb89aca5a5" xml:space="preserve"><value>请指定要修改的字段。</value></data>
+  <data name="Last_817cb148037c" xml:space="preserve"><value>草稿已更新，尚未发送。</value></data>
+  <data name="Last_0861906163bd" xml:space="preserve"><value>不支持此工具。</value></data>
+  <data name="Last_96fdb6e1e506" xml:space="preserve"><value>offset 必须是 0 至 1000000 的整数。</value></data>
+</root>

@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+  <data name="DateUnknown" xml:space="preserve"><value>Unknown date</value></data>
+  <data name="Today" xml:space="preserve"><value>Today</value></data>
+  <data name="DaysAgo" xml:space="preserve"><value>Earlier this week</value></data>
+  <data name="WeekAgo" xml:space="preserve"><value>Last week</value></data>
+  <data name="Older" xml:space="preserve"><value>Older</value></data>
+  <data name="Contact_42b013f6a361" xml:space="preserve"><value>Search name or email</value></data>
+  <data name="Contact_9070cb0eb695" xml:space="preserve"><value>Contacts</value></data>
+  <data name="Contact_163297d713b7" xml:space="preserve"><value>+  Add contact</value></data>
+  <data name="Contact_77912c43b1e9" xml:space="preserve"><value>Import from mail</value></data>
+  <data name="Contact_75c33f5c2ecc" xml:space="preserve"><value>Import complete</value></data>
+  <data name="Contact_cb63c62e50f8" xml:space="preserve"><value>OK</value></data>
+  <data name="Contact_a01a8d53938f" xml:space="preserve"><value>Import failed</value></data>
+  <data name="Contact_93362321e1bb" xml:space="preserve"><value>All contacts</value></data>
+  <data name="Contact_d33caa10efe3" xml:space="preserve"><value>Enter a contact name or email address.</value></data>
+  <data name="Contact_78fdf87306a8" xml:space="preserve"><value>Select a contact to view details</value></data>
+  <data name="Contact_a7f814c0a40d" xml:space="preserve"><value>Edit</value></data>
+  <data name="Contact_29558466833b" xml:space="preserve"><value>Send email</value></data>
+  <data name="Contact_3755f56f2f83" xml:space="preserve"><value>Delete</value></data>
+  <data name="Contact_74cff4c9e39b" xml:space="preserve"><value>Delete contact?</value></data>
+  <data name="Contact_4d0b4688c787" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Contact_b0df5c459f31" xml:space="preserve"><value>Contact information</value></data>
+  <data name="Contact_9ed627bcf63d" xml:space="preserve"><value>Email</value></data>
+  <data name="Contact_f39c6b629f80" xml:space="preserve"><value>Phone</value></data>
+  <data name="Contact_5d80806d7f55" xml:space="preserve"><value>Company</value></data>
+  <data name="Contact_e0361480e3a5" xml:space="preserve"><value>Notes</value></data>
+  <data name="Contact_02b5d33f3897" xml:space="preserve"><value>Recent correspondence</value></data>
+  <data name="Contact_ed2172fd7894" xml:space="preserve"><value>Show all</value></data>
+  <data name="Contact_a00575679ceb" xml:space="preserve"><value>No messages from this contact in the local cache</value></data>
+  <data name="Contact_be4c2616b177" xml:space="preserve"><value>Name</value></data>
+  <data name="Contact_91061a56c00f" xml:space="preserve"><value>Department</value></data>
+  <data name="Contact_a2a92e50a114" xml:space="preserve"><value>Job title</value></data>
+  <data name="Contact_fadf24dbc5a9" xml:space="preserve"><value>Save</value></data>
+  <data name="Contact_3b303cde8823" xml:space="preserve"><value>Enter a name and a valid email address.</value></data>
+  <data name="Contact_d2b8c0e173d6" xml:space="preserve"><value>This email address already exists.</value></data>
+  <data name="Contact_b12163000cd3" xml:space="preserve"><value>Save failed: </value></data>
+  <data name="Contact_42635ed1f6f1" xml:space="preserve"><value>Added {0} contacts from the local mail cache. Existing contacts were left unchanged.</value></data>
+  <data name="Contact_0464af7ccbfe" xml:space="preserve"><value>{0} contacts</value></data>
+  <data name="Contact_11e0c9499eda" xml:space="preserve"><value>Delete {0}?</value></data>
+  <data name="Ui_a9e33d11fbc3" xml:space="preserve"><value>Failed to load accounts: </value></data>
+  <data name="Ui_2a353cb3737f" xml:space="preserve"><value>Failed to load AI classification cache: </value></data>
+  <data name="Ui_4dcbbcfa6154" xml:space="preserve"><value>Queued</value></data>
+  <data name="Ui_5ecd3061a820" xml:space="preserve"><value>Classifying</value></data>
+  <data name="Ui_5dabce6dc197" xml:space="preserve"><value>AI classification failed: </value></data>
+  <data name="Ui_ef40431c5873" xml:space="preserve"><value>Composing an email</value></data>
+  <data name="Ui_9b64d64a01dd" xml:space="preserve"><value>Close the compose window before opening contacts.</value></data>
+  <data name="Ui_3cb935e8e9f3" xml:space="preserve"><value>Close the compose window before opening a message.</value></data>
+  <data name="Ui_a3fd78a0f65e" xml:space="preserve"><value>Cannot open message</value></data>
+  <data name="Ui_8620ccddedca" xml:space="preserve"><value>This message belongs to another account. Switch accounts first.</value></data>
+  <data name="Ui_3667cb105a26" xml:space="preserve"><value>Loading</value></data>
+  <data name="Ui_46aee0137ba8" xml:space="preserve"><value>Wait for the message to finish loading and try again.</value></data>
+  <data name="Ui_fe4e4469d8d3" xml:space="preserve"><value>The message may have been deleted, moved, or not yet loaded. Refresh and try again.</value></data>
+  <data name="Ui_d74eefd17e94" xml:space="preserve"><value>Syncing folders…</value></data>
+  <data name="Ui_c76fd62d5450" xml:space="preserve"><value>The server did not return an inbox</value></data>
+  <data name="Ui_01cfb10ae247" xml:space="preserve"><value>Folder sync failed; showing local folders: </value></data>
+  <data name="Ui_77b89d0d2434" xml:space="preserve"><value>Folder sync failed: </value></data>
+  <data name="Ui_67c7dec77218" xml:space="preserve"><value>Automatic sync failed; retrying: </value></data>
+  <data name="Ui_c60d0371ae5e" xml:space="preserve"><value>Configure an account first</value></data>
+  <data name="Ui_62d8dbdd1c84" xml:space="preserve"><value>Connecting to the mail account…</value></data>
+  <data name="Ui_fefa78faeb12" xml:space="preserve"><value>Sync failed; showing local cache: </value></data>
+  <data name="Ui_a0035eea1f8f" xml:space="preserve"><value>No messages</value></data>
+  <data name="Ui_3eda0841ba56" xml:space="preserve"><value>Loading messages…</value></data>
+  <data name="Ui_e6d921116cbe" xml:space="preserve"><value>Loading failed: </value></data>
+  <data name="Ui_9d95de6992f8" xml:space="preserve"><value>; scroll to retry</value></data>
+  <data name="Ui_a9dcdf1cff33" xml:space="preserve"><value>From: </value></data>
+  <data name="Ui_32d77333df9b" xml:space="preserve"><value>Date: </value></data>
+  <data name="Ui_db0f470d714c" xml:space="preserve"><value>Subject: </value></data>
+  <data name="Ui_27d61c40ca03" xml:space="preserve"><value>To: Loading…</value></data>
+  <data name="Ui_0b1b181a2d92" xml:space="preserve"><value>Cc: Loading…</value></data>
+  <data name="Ui_4f55ee1e687f" xml:space="preserve"><value>Details</value></data>
+  <data name="Ui_2119329e9dd5" xml:space="preserve"><value>Loading message body…</value></data>
+  <data name="Ui_c16dba311cc6" xml:space="preserve"><value>Failed to load message body: </value></data>
+  <data name="Ui_b6c64fabc3cd" xml:space="preserve"><value>Failed to load attachments: </value></data>
+  <data name="Ui_5308314f875c" xml:space="preserve"><value>To: </value></data>
+  <data name="Ui_071fb244eae7" xml:space="preserve"><value>Not provided</value></data>
+  <data name="Ui_b5c1a71479c0" xml:space="preserve"><value>Cc: </value></data>
+  <data name="Ui_74a5c76dadc1" xml:space="preserve"><value>To: Unable to load</value></data>
+  <data name="Ui_2f4acafcacf0" xml:space="preserve"><value>Cc: Unable to load</value></data>
+  <data name="Ui_5d5815647c76" xml:space="preserve"><value>Collapse</value></data>
+  <data name="Ui_3117effd0182" xml:space="preserve"><value>Loading preview…</value></data>
+  <data name="Ui_95f45453c3a1" xml:space="preserve"><value>The preview is not ready. Return to the message and try again.</value></data>
+  <data name="Ui_ec7a12771f38" xml:space="preserve"><value>Cannot preview this attachment: </value></data>
+  <data name="Ui_a6b66b96055b" xml:space="preserve"><value>Failed to save attachment</value></data>
+  <data name="Ui_65fc81e16119" xml:space="preserve"><value>Open</value></data>
+  <data name="Ui_a86b5bd5da40" xml:space="preserve"><value>Save as</value></data>
+  <data name="Ui_d93449b95ad7" xml:space="preserve"><value>Failed to open attachment</value></data>
+  <data name="Ui_cfbd8c7e1166" xml:space="preserve"><value>There is no default app for this file.</value></data>
+  <data name="Ui_d0fdba350302" xml:space="preserve"><value>Failed to sync read status. Select the message again to retry: </value></data>
+  <data name="Ui_aa3098a5a0ef" xml:space="preserve"><value>Press Enter to search local mail with AI</value></data>
+  <data name="Ui_c00e4ef93416" xml:space="preserve"><value>Enter a question and press Enter</value></data>
+  <data name="Ui_7d5d4930a60f" xml:space="preserve"><value>Search mail</value></data>
+  <data name="Ui_908e1f3f6085" xml:space="preserve"><value>Enter a question and press Enter.</value></data>
+  <data name="Ui_de6d93b1d134" xml:space="preserve"><value>AI search failed: </value></data>
+  <data name="Ui_587aab794b84" xml:space="preserve"><value>Filter loaded mail by date</value></data>
+  <data name="Ui_5341ec296262" xml:space="preserve"><value>AI assistant</value></data>
+  <data name="Ui_bcc347f5ce36" xml:space="preserve"><value>Reasoning</value></data>
+  <data name="Ui_138d5364bb0b" xml:space="preserve"><value>Thinking</value></data>
+  <data name="Ui_63595e95b708" xml:space="preserve"><value>Not configured</value></data>
+  <data name="Ui_d7969271e099" xml:space="preserve"><value> · Local</value></data>
+  <data name="Ui_5630b886f9cd" xml:space="preserve"><value>You</value></data>
+  <data name="Ui_6568a0ab4946" xml:space="preserve"><value>Please provide more details.</value></data>
+  <data name="Ui_dc52d35e8299" xml:space="preserve"><value>Could not complete: </value></data>
+  <data name="Ui_571ef1449bd3" xml:space="preserve"><value>There is no editable draft.</value></data>
+  <data name="Ui_0ff5087678d2" xml:space="preserve"><value>The draft changed while being read. Try again.</value></data>
+  <data name="Ui_5ae31f43f796" xml:space="preserve"><value>Configure an account first.</value></data>
+  <data name="Ui_682bf9440877" xml:space="preserve"><value>Local cache</value></data>
+  <data name="Ui_54a202327084" xml:space="preserve"><value>Select a message first.</value></data>
+  <data name="Ui_fbc3a92e5aeb" xml:space="preserve"><value>The message or compose state changed. Try again.</value></data>
+  <data name="Ui_045641504389" xml:space="preserve"><value>The editor is not ready yet.</value></data>
+  <data name="Ui_486881925a2e" xml:space="preserve"><value>Failed to load the editor.</value></data>
+  <data name="Ui_a536f34e2176" xml:space="preserve"><value>Cannot open the editor</value></data>
+  <data name="Ui_792a35738a70" xml:space="preserve"><value>Cannot reply</value></data>
+  <data name="Ui_0efdb1f0b8f3" xml:space="preserve"><value>Close draft?</value></data>
+  <data name="Ui_f4694e9308ee" xml:space="preserve"><value>The message has not been saved. Closing will discard it.</value></data>
+  <data name="Ui_3a481bc7646e" xml:space="preserve"><value>Continue editing</value></data>
+  <data name="Ui_ea4899468cae" xml:space="preserve"><value>Discard</value></data>
+  <data name="Ui_1072053d35d5" xml:space="preserve"><value>Failed to add attachment</value></data>
+  <data name="Ui_b8a7f8051bc9" xml:space="preserve"><value>AI writing</value></data>
+  <data name="Ui_8c72e6ffa111" xml:space="preserve"><value>AI writing is not available yet.</value></data>
+  <data name="Ui_4d6e7909477a" xml:space="preserve"><value>Sending email</value></data>
+  <data name="Ui_0c7c05ad53d5" xml:space="preserve"><value>Email sent</value></data>
+  <data name="Ui_364a32f32cf2" xml:space="preserve"><value>The email was sent, but the editor could not be cleared. Do not send it again.</value></data>
+  <data name="Ui_debd3a7cc7af" xml:space="preserve"><value>Sending failed: </value></data>
+  <data name="Ui_0ab81810ba33" xml:space="preserve"><value>. Select Compose to continue editing.</value></data>
+  <data name="Ui_b13ddae6cbad" xml:space="preserve"><value>Email address</value></data>
+  <data name="Ui_e9fe4dd6cc42" xml:space="preserve"><value>Login username</value></data>
+  <data name="Ui_dabfb7535cc5" xml:space="preserve"><value>Usually the same as your email address</value></data>
+  <data name="Ui_32503cb354f7" xml:space="preserve"><value>IMAP server</value></data>
+  <data name="Ui_6cbb7335b5b5" xml:space="preserve"><value>Port</value></data>
+  <data name="Ui_1bf58fe6b7f5" xml:space="preserve"><value>Use SSL/TLS</value></data>
+  <data name="Ui_941346a5f455" xml:space="preserve"><value>SMTP server</value></data>
+  <data name="Ui_656521c4ea6f" xml:space="preserve"><value>SMTP port</value></data>
+  <data name="Ui_e63f130046f4" xml:space="preserve"><value>Password or app password</value></data>
+  <data name="Ui_c53b1b5a1719" xml:space="preserve"><value>Enter app password</value></data>
+  <data name="Ui_1a866ebd4df9" xml:space="preserve"><value>Mail servers</value></data>
+  <data name="Ui_9f7d652cf2ce" xml:space="preserve"><value>Configure the account and servers. Saving tests the IMAP connection; sending uses the SMTP settings.</value></data>
+  <data name="Ui_2d980c4eb4f6" xml:space="preserve"><value>Incoming mail · IMAP</value></data>
+  <data name="Ui_07edb49543ea" xml:space="preserve"><value>Outgoing mail · SMTP</value></data>
+  <data name="Ui_a7836c9c9281" xml:space="preserve"><value>AI service</value></data>
+  <data name="Ui_b234d4ad9635" xml:space="preserve"><value>Decision model</value></data>
+  <data name="Ui_482ffd920224" xml:space="preserve"><value>Generation model (for summaries and writing)</value></data>
+  <data name="Ui_9612b1d325da" xml:space="preserve"><value>About me</value></data>
+  <data name="Ui_38ef3ea7df8d" xml:space="preserve"><value>For example: I am a product manager focused on project progress, customer feedback, and security.</value></data>
+  <data name="Ui_fa199b22e631" xml:space="preserve"><value>Refresh model list</value></data>
+  <data name="Ui_c80ff00b48ae" xml:space="preserve"><value>Enter a valid port.</value></data>
+  <data name="Ui_b66432e5ffb0" xml:space="preserve"><value>Loading models…</value></data>
+  <data name="Ui_90a2379b7c07" xml:space="preserve"><value>Failed to load models: </value></data>
+  <data name="Ui_cc02bd1d65c6" xml:space="preserve"><value>Automatically classify loaded messages</value></data>
+  <data name="Ui_1c623b0d00bf" xml:space="preserve"><value>Reclassify loaded messages in this folder</value></data>
+  <data name="Ui_a9d73061c250" xml:space="preserve"><value>AI settings</value></data>
+  <data name="Ui_da5402b2a1dc" xml:space="preserve"><value>The decision model classifies importance and powers AI search. Your profile helps AI understand your role and interests.</value></data>
+  <data name="Ui_847fc8062342" xml:space="preserve"><value>Test and save</value></data>
+  <data name="Ui_fadf24dbc5a9" xml:space="preserve"><value>Save</value></data>
+  <data name="Ui_4d0b4688c787" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Ui_7debf9cb0372" xml:space="preserve"><value>Settings</value></data>
+  <data name="Ui_581f3e8a08c2" xml:space="preserve"><value>Save and enable AI importance classification first.</value></data>
+  <data name="Ui_10118cb066b5" xml:space="preserve"><value>Enter a valid port and select a decision model.</value></data>
+  <data name="Ui_7f7b8e27000f" xml:space="preserve"><value>Testing model…</value></data>
+  <data name="Ui_793a10b4940d" xml:space="preserve"><value>Enter the account, server, valid port, and password or app password.</value></data>
+  <data name="Ui_83d6267aa522" xml:space="preserve"><value>Enter a valid SMTP port.</value></data>
+  <data name="Ui_0c2a21faf748" xml:space="preserve"><value>Testing connection…</value></data>
+  <data name="Ui_a43d8b375652" xml:space="preserve"><value>Connection or save failed: </value></data>
+  <data name="Ui_cb63c62e50f8" xml:space="preserve"><value>OK</value></data>
+  <data name="FolderInbox" xml:space="preserve"><value>Inbox</value></data>
+  <data name="FolderSent" xml:space="preserve"><value>Sent</value></data>
+  <data name="FolderDrafts" xml:space="preserve"><value>Drafts</value></data>
+  <data name="FolderDeleted" xml:space="preserve"><value>Deleted</value></data>
+  <data name="FolderJunk" xml:space="preserve"><value>Junk</value></data>
+  <data name="FolderArchive" xml:space="preserve"><value>Archive</value></data>
+  <data name="ImportanceHigh" xml:space="preserve"><value>Important</value></data>
+  <data name="ImportanceNormal" xml:space="preserve"><value>Normal</value></data>
+  <data name="ImportanceLow" xml:space="preserve"><value>Low</value></data>
+  <data name="ImportanceFailed" xml:space="preserve"><value>Failed</value></data>
+  <data name="More_49deaf7da20d" xml:space="preserve"><value>File</value></data>
+  <data name="More_5ae31f43f796" xml:space="preserve"><value>Configure an account first.</value></data>
+  <data name="More_c4bfac5f682f" xml:space="preserve"><value>The account or app password is unavailable. Configure the account again.</value></data>
+  <data name="More_2c207ab6b221" xml:space="preserve"><value>Configure the SMTP server and port in settings first.</value></data>
+  <data name="More_6a66c747edcb" xml:space="preserve"><value>Enter valid recipient addresses, separated by commas.</value></data>
+  <data name="More_87b629422272" xml:space="preserve"><value>Enter valid Cc addresses, separated by commas.</value></data>
+  <data name="More_8b42227ca4a1" xml:space="preserve"><value>IMAP login timed out. Check the network and mail server.</value></data>
+  <data name="More_9cf8aaefb0c2" xml:space="preserve"><value>Configure the account and app password first.</value></data>
+  <data name="More_7591f45427c7" xml:space="preserve"><value>Loading folders timed out. Select Refresh and try again later.</value></data>
+  <data name="More_1ab279dc6512" xml:space="preserve"><value>The server folder was rebuilt. Reopen it.</value></data>
+  <data name="More_1cc645d7a525" xml:space="preserve"><value>Unknown sender</value></data>
+  <data name="More_dd6026e30d48" xml:space="preserve"><value>(No subject)</value></data>
+  <data name="More_10bee1228539" xml:space="preserve"><value>Cannot connect to the account to retrieve the message body.</value></data>
+  <data name="More_76be3e92a26f" xml:space="preserve"><value>Cannot connect to the account to retrieve reply information.</value></data>
+  <data name="More_b8cb72e2c4e2" xml:space="preserve"><value>The original message has no usable reply address.</value></data>
+  <data name="More_96055ce0ed7d" xml:space="preserve"><value>Cannot connect to the account to retrieve recipients.</value></data>
+  <data name="More_e0702ff2cb5e" xml:space="preserve"><value>Select a folder first.</value></data>
+  <data name="More_38ca211767ce" xml:space="preserve"><value>(No message body)</value></data>
+  <data name="More_2c067f642cdc" xml:space="preserve"><value>Cannot connect to the account to retrieve attachments.</value></data>
+  <data name="More_99f6fe6c41ad" xml:space="preserve"><value>Attachment</value></data>
+  <data name="More_81592e481edb" xml:space="preserve"><value>Attached message.eml</value></data>
+  <data name="More_e8dc9306cda8" xml:space="preserve"><value>The server does not allow changing message status in this folder.</value></data>
+  <data name="More_791c29dbb42e" xml:space="preserve"><value>The server did not confirm the read status. The message may have been deleted or moved.</value></data>
+  <data name="More_9c718678dedd" xml:space="preserve"><value>This attachment type cannot be previewed. Use Save as.</value></data>
+  <data name="More_f76ea878382e" xml:space="preserve"><value>No system preview handler is installed for this format. Use Save as.</value></data>
+  <data name="More_ce2072231a75" xml:space="preserve"><value>Could not create the system preview handler.</value></data>
+  <data name="More_540b07df5820" xml:space="preserve"><value>The system preview handler does not support this attachment.</value></data>
+  <data name="More_38251c874604" xml:space="preserve"><value>The model did not return valid search results</value></data>
+  <data name="More_c866fc93cafc" xml:space="preserve"><value>AI search input exceeds the model's batch limit. Increase its physical batch size.</value></data>
+  <data name="More_8f42af3f9dee" xml:space="preserve"><value>AI input exceeds the model's batch limit. Increase its physical batch size.</value></data>
+  <data name="More_efcf56ef08c1" xml:space="preserve"><value>The model did not return a valid classification</value></data>
+  <data name="More_cad26bc0d928" xml:space="preserve"><value>Select a generation model in settings first.</value></data>
+  <data name="More_1c949c60bcdc" xml:space="preserve"><value>The model did not return a valid response. Retry or select another model.</value></data>
+  <data name="More_ace1c7c8e253" xml:space="preserve"><value>Draft created</value></data>
+  <data name="More_ba9c8c4123aa" xml:space="preserve"><value>Draft updated</value></data>
+  <data name="More_bc39e8c9de1b" xml:space="preserve"><value>, not sent. The assistant could not generate a follow-up response; check the draft.</value></data>
+  <data name="More_5b895f1fa36d" xml:space="preserve"><value>The assistant made too many tool calls. Try again.</value></data>
+  <data name="More_6cc08f2497ee" xml:space="preserve"><value>AI streaming request failed: </value></data>
+  <data name="More_7b012904b99f" xml:space="preserve"><value>The model output was truncated. Retry or increase the output length.</value></data>
+  <data name="More_44675afdc085" xml:space="preserve"><value>The AI stream was interrupted. Try again.</value></data>
+  <data name="More_f4f5fcbf5f82" xml:space="preserve"><value>The model did not complete its reasoning output.</value></data>
+  <data name="More_c593b886a49d" xml:space="preserve"><value>The model requested an unsupported action.</value></data>
+  <data name="More_5cffbb5128d2" xml:space="preserve"><value>The model requested an unsupported action. </value></data>
+  <data name="More_694f2fb3269c" xml:space="preserve"><value>The model's tool arguments are invalid.</value></data>
+  <data name="More_10ac3f0caad7" xml:space="preserve"><value>The model's tool call is invalid.</value></data>
+  <data name="More_a22693d9e0e4" xml:space="preserve"><value>The model did not return a response.</value></data>
+  <data name="More_edde1f2158e8" xml:space="preserve"><value>The model's JSON does not contain an assistant response.</value></data>
+  <data name="More_389b6373e09a" xml:space="preserve"><value>The draft was updated but not sent. The assistant's follow-up failed; check the draft: </value></data>
+  <data name="More_5830bb38881f" xml:space="preserve"><value>The message link is invalid or expired. Search again.</value></data>
+  <data name="More_d1541f2f9e11" xml:space="preserve"><value>The message is no longer in the current cache. Search again.</value></data>
+  <data name="More_8cd86b61e2f0" xml:space="preserve"><value>The selected message changed. Submit your request again.</value></data>
+  <data name="More_c2ddbf9383c3" xml:space="preserve"><value>Summarize the selected email, including key points and actions.</value></data>
+  <data name="More_bd2f7f61d721" xml:space="preserve"><value>Help me reply to this email.</value></data>
+  <data name="More_c5eefec9d2df" xml:space="preserve"><value>This action only supports reading mail.</value></data>
+  <data name="More_346a9dc82d60" xml:space="preserve"><value>The model did not return a valid reply. Try again.</value></data>
+  <data name="More_2028494e3a97" xml:space="preserve"><value>The reply draft is ready. Review it before sending.</value></data>
+  <data name="More_94d70561872e" xml:space="preserve"><value>A compose operation is in progress. Try again later.</value></data>
+  <data name="More_d6e91e01c05c" xml:space="preserve"><value>The compose window already has content. Handle the current draft before creating another.</value></data>
+  <data name="More_55224022ad03" xml:space="preserve"><value>Select table size (up to 10 × 10)</value></data>
+  <data name="More_b6546a4db7e1" xml:space="preserve"><value>smtp.example.com (optional for now)</value></data>
+  <data name="Fmt_9c3ab1d552d3" xml:space="preserve"><value>Attachments ({0})</value></data>
+  <data name="Fmt_b3c9b1921f64" xml:space="preserve"><value>Attachments ({0})</value></data>
+  <data name="Fmt_4f922a65014e" xml:space="preserve"><value>Local cache: {0} messages · Syncing…</value></data>
+  <data name="Fmt_682976292efe" xml:space="preserve"><value>Offline cache: {0} / {1} messages loaded. Connection failed: {2}</value></data>
+  <data name="Fmt_51affa73cdfd" xml:space="preserve"><value>Loaded {0} / {1} messages</value></data>
+  <data name="Fmt_512c06f73ef0" xml:space="preserve"><value>AI search · Local cache 0/{0} · 0 matches</value></data>
+  <data name="Fmt_d014a09ccbde" xml:space="preserve"><value>AI search · Local cache {0}/{1} · {2} matches</value></data>
+  <data name="Fmt_c07cb2f4604c" xml:space="preserve"><value>AI search complete · Local index {0}/{1} · {2} matches</value></data>
+  <data name="Fmt_03ab50ece31b" xml:space="preserve"><value> · {0} failed</value></data>
+  <data name="Fmt_e13d73cd0374" xml:space="preserve"><value> · {0} body retrieval or classification failures</value></data>
+  <data name="Fmt_459e55897a4a" xml:space="preserve"><value>AI search stopped · {0} matches (local cache)</value></data>
+  <data name="Fmt_4e5f0d08014a" xml:space="preserve"><value>Date: {0:yyyy-MM-dd} (loaded messages only)</value></data>
+  <data name="Fmt_1fdcb76706ab" xml:space="preserve"><value>{0} must be a string.</value></data>
+  <data name="Fmt_8f9728c18b2c" xml:space="preserve"><value>{0} must be a string.</value></data>
+  <data name="Fmt_82bb166a44ab" xml:space="preserve"><value>{0} is too long.</value></data>
+  <data name="Fmt_dc844c6a6503" xml:space="preserve"><value>On {0}, {1} wrote:</value></data>
+  <data name="Fmt_580e68a76a42" xml:space="preserve"><value>{0} columns × {1} rows</value></data>
+  <data name="Fmt_42ce4d591e3e" xml:space="preserve"><value>{0} columns {1} rows</value></data>
+  <data name="Fmt_71963e091707" xml:space="preserve"><value>Cannot read file: {0}</value></data>
+  <data name="Fmt_c5a7c143ddeb" xml:space="preserve"><value>Found {0} decision models and {1} generation models.</value></data>
+  <data name="Fmt_2803a43bd7a7" xml:space="preserve"><value>Reclassifying {0}/{1}…</value></data>
+  <data name="Fmt_99bc0ca14c3a" xml:space="preserve"><value>Reclassified {0} messages; failed messages are marked Failed.</value></data>
+  <data name="Fmt_9e6ea7a754b7" xml:space="preserve"><value>Connection to IMAP server {0}:{1} timed out. Check the network, server address and port.</value></data>
+  <data name="Fmt_ce6690dbc149" xml:space="preserve"><value>The server reports {0} messages but returned only {1} identifiers. Check the IMAP sync range.</value></data>
+  <data name="Fmt_1b6657f3e74c" xml:space="preserve"><value>SystemOne request failed ({0}): {1}</value></data>
+  <data name="Fmt_e41b6588edc3" xml:space="preserve"><value>AI request failed ({0}): {1}</value></data>
+  <data name="Fmt_ef1bea6eed7b" xml:space="preserve"><value>Invalid JSON from model (line {0}, byte {1}): {2}</value></data>
+  <data name="Last_d5ee5d8c0b6c" xml:space="preserve"><value> (based on message content)</value></data>
+  <data name="Last_e3a8aeee5032" xml:space="preserve"><value>Tool arguments must be an object.</value></data>
+  <data name="Last_331a788bdc38" xml:space="preserve"><value>Dates must use YYYY-MM-DD format.</value></data>
+  <data name="Last_02d82f5d57d4" xml:space="preserve"><value>The start date cannot be after the end date.</value></data>
+  <data name="Last_af741a960aa2" xml:space="preserve"><value>Local cache for the current account; results may be incomplete. Keywords match sender, subject and preview only.</value></data>
+  <data name="Last_8e516be6aa62" xml:space="preserve"><value>The message identifier is invalid or expired. Search again.</value></data>
+  <data name="Last_5481ef8e6033" xml:space="preserve"><value>The message is not in the account's current cache. Search again.</value></data>
+  <data name="Last_8732a7b0a55c" xml:space="preserve"><value>The account or mail cache changed. Search again.</value></data>
+  <data name="Last_180eb12300c8" xml:space="preserve"><value>The body offset is out of range.</value></data>
+  <data name="Last_de048b6e5b7f" xml:space="preserve"><value>Provide a contact name or email address to search.</value></data>
+  <data name="Last_4edc0a66e484" xml:space="preserve"><value>The email draft is invalid.</value></data>
+  <data name="Last_11e1a4a971e3" xml:space="preserve"><value>The draft is open and filled in; it has not been sent.</value></data>
+  <data name="Last_3cc15e1e3d10" xml:space="preserve"><value>Read the current draft again; it may have changed.</value></data>
+  <data name="Last_5fdb89aca5a5" xml:space="preserve"><value>Specify a field to change.</value></data>
+  <data name="Last_817cb148037c" xml:space="preserve"><value>The draft was updated but not sent.</value></data>
+  <data name="Last_0861906163bd" xml:space="preserve"><value>This tool is not supported.</value></data>
+  <data name="Last_96fdb6e1e506" xml:space="preserve"><value>offset must be an integer between 0 and 1000000.</value></data>
+</root>

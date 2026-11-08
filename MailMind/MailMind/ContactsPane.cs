@@ -16,7 +16,7 @@ public sealed class ContactsPane : Grid
     public sealed record Contact(long Id, string Name, string Email, string Phone, string Company, string Department, string Title, string Notes);
     private readonly string connection;
     private readonly ListView list = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, SelectionMode = ListViewSelectionMode.Single };
-    private readonly TextBox search = new() { PlaceholderText = "搜索姓名或邮箱" };
+    private readonly TextBox search = new() { PlaceholderText = Strings.Get("Contact_42b013f6a361") };
     private readonly StackPanel detail = new() { Spacing = 12, Padding = new Thickness(12, 0, 18, 18) };
     private readonly TextBlock count = new() { Margin = new Thickness(12), Opacity = .65 };
     private List<Contact> contacts = new();
@@ -44,10 +44,10 @@ public sealed class ContactsPane : Grid
         var top = new Grid { Padding = new Thickness(18, 18, 18, 18), ColumnSpacing = 16 };
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        top.Children.Add(new TextBlock { Text = "通讯录", FontSize = 28, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-        var add = new Button { Content = "+  新增联系人", Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 40, 99, 207)), Foreground = new SolidColorBrush(Microsoft.UI.Colors.White), Padding = new Thickness(16, 8, 16, 8) };
+        top.Children.Add(new TextBlock { Text = Strings.Get("Contact_9070cb0eb695"), FontSize = 28, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        var add = new Button { Content = Strings.Get("Contact_163297d713b7"), Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 40, 99, 207)), Foreground = new SolidColorBrush(Microsoft.UI.Colors.White), Padding = new Thickness(16, 8, 16, 8) };
         add.Click += (_, _) => { if (!editing) Edit(null); };
-        var import = new Button { Content = "从邮件导入", Padding = new Thickness(12, 8, 12, 8) };
+        var import = new Button { Content = Strings.Get("Contact_77912c43b1e9"), Padding = new Thickness(12, 8, 12, 8) };
         import.Click += async (_, _) =>
         {
             if (editing) return;
@@ -55,11 +55,11 @@ public sealed class ContactsPane : Grid
             {
                 int imported = ImportCachedSenders();
                 Refresh();
-                await new ContentDialog { XamlRoot = XamlRoot, Title = "导入完成", Content = $"已从本地邮件缓存新增 {imported} 位联系人。已有联系人资料保持不变。", CloseButtonText = "知道了" }.ShowAsync();
+                await new ContentDialog { XamlRoot = XamlRoot, Title = Strings.Get("Contact_75c33f5c2ecc"), Content = string.Format(Strings.Get("Contact_42635ed1f6f1"), imported), CloseButtonText = Strings.Get("Contact_cb63c62e50f8") }.ShowAsync();
             }
             catch (Exception ex)
             {
-                await new ContentDialog { XamlRoot = XamlRoot, Title = "导入失败", Content = ex.Message, CloseButtonText = "知道了" }.ShowAsync();
+                await new ContentDialog { XamlRoot = XamlRoot, Title = Strings.Get("Contact_a01a8d53938f"), Content = ex.Message, CloseButtonText = Strings.Get("Contact_cb63c62e50f8") }.ShowAsync();
             }
         };
         var topActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 }; topActions.Children.Add(add); topActions.Children.Add(import);
@@ -68,7 +68,7 @@ public sealed class ContactsPane : Grid
         SetRow(columns, 1); shell.Children.Add(columns);
         left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); left.RowDefinitions.Add(new RowDefinition()); left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         search.TextChanged += (_, _) => Filter(); left.Children.Add(search);
-        var filterLabel = new TextBlock { Text = "全部联系人", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(4, 0, 0, 0) }; SetRow(filterLabel, 1); left.Children.Add(filterLabel);
+        var filterLabel = new TextBlock { Text = Strings.Get("Contact_93362321e1bb"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(4, 0, 0, 0) }; SetRow(filterLabel, 1); left.Children.Add(filterLabel);
         list.SelectionChanged += (_, _) => ShowDetail(); SetRow(list, 2); left.Children.Add(list); SetRow(count, 3); left.Children.Add(count); columns.Children.Add(left);
         var scroll = new ScrollViewer { Content = detail, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }; SetColumn(scroll, 1); columns.Children.Add(scroll);
         Refresh();
@@ -77,7 +77,7 @@ public sealed class ContactsPane : Grid
     public (List<Contact> Matches, bool Truncated) SearchContacts(string query, int limit = 20)
     {
         query = query.Trim();
-        if (query.Length == 0) throw new ArgumentException("请输入联系人姓名或邮箱。", nameof(query));
+        if (query.Length == 0) throw new ArgumentException(Strings.Get("Contact_d33caa10efe3"), nameof(query));
         var matches = new List<Contact>();
         using var db = Open(); using var cmd = db.CreateCommand();
         cmd.CommandText = "SELECT id,name,email,phone,company,department,title,notes FROM contacts ORDER BY name COLLATE NOCASE";
@@ -162,7 +162,7 @@ public sealed class ContactsPane : Grid
             text.Children.Add(new TextBlock { Text = Subtitle(c), Opacity = .65, MaxWidth = 210, TextTrimming = TextTrimming.CharacterEllipsis }); row.Children.Add(text);
             list.Items.Add(new ListViewItem { Content = row, Tag = c, HorizontalContentAlignment = HorizontalAlignment.Stretch });
         }
-        count.Text = $"共 {results.Count} 位联系人";
+        count.Text = string.Format(Strings.Get("Contact_0464af7ccbfe"), results.Count);
         if (results.Count > 0) list.SelectedItem = list.Items.OfType<ListViewItem>().First(item => item.Tag is Contact); else ShowDetail();
     }
     private static Encoding CreatePinyinEncoding()
@@ -190,17 +190,17 @@ public sealed class ContactsPane : Grid
     private void ShowDetail()
     {
         detail.Children.Clear();
-        if (SelectedContact() is not Contact c) { detail.Children.Add(new TextBlock { Text = "选择联系人查看详情", Opacity = .6, FontSize = 18, Margin = new Thickness(20) }); return; }
+        if (SelectedContact() is not Contact c) { detail.Children.Add(new TextBlock { Text = Strings.Get("Contact_78fdf87306a8"), Opacity = .6, FontSize = 18, Margin = new Thickness(20) }); return; }
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var edit = new Button { Content = "编辑" }; edit.Click += (_, _) => Edit(c); actions.Children.Add(edit);
-        var compose = new Button { Content = "发邮件" }; compose.Click += (_, _) => ComposeRequested?.Invoke(c.Email); actions.Children.Add(compose);
-        var delete = new Button { Content = "删除" }; delete.Click += async (_, _) => { var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "删除联系人？", Content = $"确定删除 {c.Name}？", PrimaryButtonText = "删除", CloseButtonText = "取消" }; if (await dialog.ShowAsync() == ContentDialogResult.Primary) { using var db = Open(); using var cmd = db.CreateCommand(); cmd.CommandText = "DELETE FROM contacts WHERE id=$id"; cmd.Parameters.AddWithValue("$id", c.Id); cmd.ExecuteNonQuery(); Refresh(); } }; actions.Children.Add(delete); detail.Children.Add(actions);
+        var edit = new Button { Content = Strings.Get("Contact_a7f814c0a40d") }; edit.Click += (_, _) => Edit(c); actions.Children.Add(edit);
+        var compose = new Button { Content = Strings.Get("Contact_29558466833b") }; compose.Click += (_, _) => ComposeRequested?.Invoke(c.Email); actions.Children.Add(compose);
+        var delete = new Button { Content = Strings.Get("Contact_3755f56f2f83") }; delete.Click += async (_, _) => { var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = Strings.Get("Contact_74cff4c9e39b"), Content = string.Format(Strings.Get("Contact_11e0c9499eda"), c.Name), PrimaryButtonText = Strings.Get("Contact_3755f56f2f83"), CloseButtonText = Strings.Get("Contact_4d0b4688c787") }; if (await dialog.ShowAsync() == ContentDialogResult.Primary) { using var db = Open(); using var cmd = db.CreateCommand(); cmd.CommandText = "DELETE FROM contacts WHERE id=$id"; cmd.Parameters.AddWithValue("$id", c.Id); cmd.ExecuteNonQuery(); Refresh(); } }; actions.Children.Add(delete); detail.Children.Add(actions);
         var identity = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 18 }; identity.Children.Add(Avatar(c, 72));
         var identityText = new StackPanel { Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
         identityText.Children.Add(new TextBlock { Text = c.Name, FontSize = 26, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }); identityText.Children.Add(new TextBlock { Text = Subtitle(c), Opacity = .65 }); identity.Children.Add(identityText); detail.Children.Add(Card(identity));
         var info = new StackPanel { Spacing = 16 };
-        info.Children.Add(new TextBlock { Text = "联系信息", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        foreach (var (label, value, glyph) in new[] { ("邮箱", c.Email, "\uE715"), ("电话", c.Phone, "\uE717"), ("公司", c.Company, "\uE80F"), ("备注", c.Notes, "\uE8A5") })
+        info.Children.Add(new TextBlock { Text = Strings.Get("Contact_b0df5c459f31"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        foreach (var (label, value, glyph) in new[] { (Strings.Get("Contact_9ed627bcf63d"), c.Email, "\uE715"), (Strings.Get("Contact_f39c6b629f80"), c.Phone, "\uE717"), (Strings.Get("Contact_5d80806d7f55"), c.Company, "\uE80F"), (Strings.Get("Contact_e0361480e3a5"), c.Notes, "\uE8A5") })
         {
             var row = InfoRow(label, glyph);
             var text = new TextBlock { Text = string.IsNullOrWhiteSpace(value) ? "—" : value, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
@@ -210,14 +210,14 @@ public sealed class ContactsPane : Grid
         var recent = RecentMessages(c.Email);
         var history = new StackPanel { Spacing = 10 };
         var historyHeader = new Grid(); historyHeader.ColumnDefinitions.Add(new ColumnDefinition()); historyHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        historyHeader.Children.Add(new TextBlock { Text = "最近往来", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-        var showAll = new Button { Content = "查看全部", Visibility = recent.Count > 3 ? Visibility.Visible : Visibility.Collapsed };
+        historyHeader.Children.Add(new TextBlock { Text = Strings.Get("Contact_02b5d33f3897"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        var showAll = new Button { Content = Strings.Get("Contact_ed2172fd7894"), Visibility = recent.Count > 3 ? Visibility.Visible : Visibility.Collapsed };
         SetColumn(showAll, 1); historyHeader.Children.Add(showAll); history.Children.Add(historyHeader);
         var entries = new StackPanel { Spacing = 4 }; history.Children.Add(entries);
         void RenderMessages(int limit)
         {
             entries.Children.Clear();
-            if (recent.Count == 0) entries.Children.Add(new TextBlock { Text = "本地缓存中暂无该联系人的来信", Opacity = .65, TextWrapping = TextWrapping.Wrap });
+            if (recent.Count == 0) entries.Children.Add(new TextBlock { Text = Strings.Get("Contact_a00575679ceb"), Opacity = .65, TextWrapping = TextWrapping.Wrap });
             foreach (var message in recent.Take(limit))
             {
                 var row = new Grid { ColumnSpacing = 12 }; row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -275,10 +275,10 @@ public sealed class ContactsPane : Grid
         list.IsEnabled = false;
         search.IsEnabled = false;
         detail.Children.Clear();
-        var fields = new[] { new TextBox { PlaceholderText = "姓名", Text = c?.Name ?? "", FontSize = 20 }, new TextBox { PlaceholderText = "邮箱", Text = c?.Email ?? "" }, new TextBox { PlaceholderText = "电话", Text = c?.Phone ?? "" }, new TextBox { PlaceholderText = "公司", Text = c?.Company ?? "" }, new TextBox { PlaceholderText = "部门", Text = c?.Department ?? "" }, new TextBox { PlaceholderText = "职位", Text = c?.Title ?? "" }, new TextBox { PlaceholderText = "备注", Text = c?.Notes ?? "", AcceptsReturn = true } };
+        var fields = new[] { new TextBox { PlaceholderText = Strings.Get("Contact_be4c2616b177"), Text = c?.Name ?? "", FontSize = 20 }, new TextBox { PlaceholderText = Strings.Get("Contact_9ed627bcf63d"), Text = c?.Email ?? "" }, new TextBox { PlaceholderText = Strings.Get("Contact_f39c6b629f80"), Text = c?.Phone ?? "" }, new TextBox { PlaceholderText = Strings.Get("Contact_5d80806d7f55"), Text = c?.Company ?? "" }, new TextBox { PlaceholderText = Strings.Get("Contact_91061a56c00f"), Text = c?.Department ?? "" }, new TextBox { PlaceholderText = Strings.Get("Contact_a2a92e50a114"), Text = c?.Title ?? "" }, new TextBox { PlaceholderText = Strings.Get("Contact_e0361480e3a5"), Text = c?.Notes ?? "", AcceptsReturn = true } };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var save = new Button { Content = "保存", Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 40, 99, 207)), Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) };
-        var cancel = new Button { Content = "取消" };
+        var save = new Button { Content = Strings.Get("Contact_fadf24dbc5a9"), Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 40, 99, 207)), Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) };
+        var cancel = new Button { Content = Strings.Get("Contact_4d0b4688c787") };
         actions.Children.Add(save); actions.Children.Add(cancel); detail.Children.Add(actions);
         var identity = new Grid { ColumnSpacing = 18 };
         identity.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -292,8 +292,8 @@ public sealed class ContactsPane : Grid
         identityFields.Children.Add(roleFields); SetColumn(identityFields, 1); identity.Children.Add(identityFields);
         detail.Children.Add(Card(identity));
         var info = new StackPanel { Spacing = 16 };
-        info.Children.Add(new TextBlock { Text = "联系信息", FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        foreach (var (label, index, glyph) in new[] { ("邮箱", 1, "\uE715"), ("电话", 2, "\uE717"), ("公司", 3, "\uE80F"), ("备注", 6, "\uE8A5") })
+        info.Children.Add(new TextBlock { Text = Strings.Get("Contact_b0df5c459f31"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        foreach (var (label, index, glyph) in new[] { (Strings.Get("Contact_9ed627bcf63d"), 1, "\uE715"), (Strings.Get("Contact_f39c6b629f80"), 2, "\uE717"), (Strings.Get("Contact_5d80806d7f55"), 3, "\uE80F"), (Strings.Get("Contact_e0361480e3a5"), 6, "\uE8A5") })
         {
             var row = InfoRow(label, glyph);
             SetColumn(fields[index], 2); row.Children.Add(fields[index]); info.Children.Add(row);
@@ -304,15 +304,15 @@ public sealed class ContactsPane : Grid
         cancel.Click += (_, _) => { EndEdit(); ShowDetail(); };
         save.Click += (_, _) =>
         {
-            if (string.IsNullOrWhiteSpace(fields[0].Text) || !MimeKit.MailboxAddress.TryParse(fields[1].Text.Trim(), out var parsed) || parsed.Address != fields[1].Text.Trim()) { error.Text = "请填写姓名和有效的邮箱地址。"; return; }
-            if (contacts.Any(x => x.Id != c?.Id && string.Equals(x.Email, fields[1].Text.Trim(), StringComparison.OrdinalIgnoreCase))) { error.Text = "该邮箱已存在。"; return; }
+            if (string.IsNullOrWhiteSpace(fields[0].Text) || !MimeKit.MailboxAddress.TryParse(fields[1].Text.Trim(), out var parsed) || parsed.Address != fields[1].Text.Trim()) { error.Text = Strings.Get("Contact_3b303cde8823"); return; }
+            if (contacts.Any(x => x.Id != c?.Id && string.Equals(x.Email, fields[1].Text.Trim(), StringComparison.OrdinalIgnoreCase))) { error.Text = Strings.Get("Contact_d2b8c0e173d6"); return; }
             try
             {
                 using var db = Open(); using var cmd = db.CreateCommand(); cmd.CommandText = c == null ? "INSERT INTO contacts(name,email,phone,company,department,title,notes) VALUES($n,$e,$p,$c,$d,$t,$o)" : "UPDATE contacts SET name=$n,email=$e,phone=$p,company=$c,department=$d,title=$t,notes=$o WHERE id=$id";
                 string[] keys = { "$n", "$e", "$p", "$c", "$d", "$t", "$o" }; for (int i = 0; i < keys.Length; i++) cmd.Parameters.AddWithValue(keys[i], fields[i].Text.Trim()); if (c != null) cmd.Parameters.AddWithValue("$id", c.Id); cmd.ExecuteNonQuery();
                 var email = fields[1].Text.Trim(); EndEdit(); Refresh(); list.SelectedItem = list.Items.OfType<ListViewItem>().FirstOrDefault(item => string.Equals((item.Tag as Contact)?.Email, email, StringComparison.OrdinalIgnoreCase));
             }
-            catch (Exception ex) { error.Text = "保存失败：" + ex.Message; }
+            catch (Exception ex) { error.Text = Strings.Get("Contact_b12163000cd3") + ex.Message; }
         };
         fields[0].Focus(FocusState.Programmatic);
     }

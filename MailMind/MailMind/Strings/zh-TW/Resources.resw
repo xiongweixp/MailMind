@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+  <data name="L44525c2a4ff9.Text" xml:space="preserve"><value>智郵</value></data>
+  <data name="L3bad90535a88.Text" xml:space="preserve"><value>你的 AI 郵件助理</value></data>
+  <data name="La02de73e09bb.Content" xml:space="preserve"><value>✎  寫郵件</value></data>
+  <data name="L0bcda26d6f5c.ToolTipService.ToolTip" xml:space="preserve"><value>重新整理</value></data>
+  <data name="L0bcda26d6f5c.AutomationProperties.Name" xml:space="preserve"><value>重新整理</value></data>
+  <data name="L90406df61d59.Text" xml:space="preserve"><value>尚未新增郵箱</value></data>
+  <data name="Ld1e43a452306.Text" xml:space="preserve"><value>尚未連接郵箱</value></data>
+  <data name="L66318d2d0d82.Text" xml:space="preserve"><value>通訊錄</value></data>
+  <data name="L725cc71ba3bb.Content" xml:space="preserve"><value>⚙   設定</value></data>
+  <data name="Lae7b06edb77b.PlaceholderText" xml:space="preserve"><value>搜尋郵件</value></data>
+  <data name="Lae7b06edb77b.AutomationProperties.Name" xml:space="preserve"><value>搜尋郵件</value></data>
+  <data name="Lb94351cb1efa.ToolTipService.ToolTip" xml:space="preserve"><value>按日期篩選已載入郵件</value></data>
+  <data name="Lb94351cb1efa.AutomationProperties.Name" xml:space="preserve"><value>按日期篩選郵件</value></data>
+  <data name="L8a3036c006a9.Text" xml:space="preserve"><value>選擇郵件日期</value></data>
+  <data name="L1f8684d51d44.Content" xml:space="preserve"><value>清除日期篩選</value></data>
+  <data name="L7cd256cac68b.ToolTipService.ToolTip" xml:space="preserve"><value>切換 AI 搜尋；輸入問題後按 Enter</value></data>
+  <data name="L7cd256cac68b.AutomationProperties.Name" xml:space="preserve"><value>AI 搜尋</value></data>
+  <data name="L1778f3cd23b8.Content" xml:space="preserve"><value>中止</value></data>
+  <data name="Lf1b4d186c522.Text" xml:space="preserve"><value>收件匣</value></data>
+  <data name="L2987cf05e0ad.Content" xml:space="preserve"><value>清除篩選</value></data>
+  <data name="L2987cf05e0ad.ToolTipService.ToolTip" xml:space="preserve"><value>清除搜尋和日期篩選</value></data>
+  <data name="L0b5c26237f13.Text" xml:space="preserve"><value>連接郵箱後查看郵件</value></data>
+  <data name="L4c00ee6996de.ToolTipService.ToolTip" xml:space="preserve"><value>AI 判斷的郵件重要性</value></data>
+  <data name="Lf08a6a599a4f.ToolTipService.ToolTip" xml:space="preserve"><value>含附件</value></data>
+  <data name="Lf08a6a599a4f.AutomationProperties.Name" xml:space="preserve"><value>含附件</value></data>
+  <data name="Le9933f78d0f2.Text" xml:space="preserve"><value>還沒有郵件</value></data>
+  <data name="L861a422842f2.AutomationProperties.Name" xml:space="preserve"><value>回覆</value></data>
+  <data name="L0ffb004c0179.Text" xml:space="preserve"><value>回覆</value></data>
+  <data name="L793550f6323d.AutomationProperties.Name" xml:space="preserve"><value>全部回覆</value></data>
+  <data name="Lc987773d64f9.Text" xml:space="preserve"><value>全部回覆</value></data>
+  <data name="Lece1b8807c68.AutomationProperties.Name" xml:space="preserve"><value>轉寄</value></data>
+  <data name="L751d83f14167.Text" xml:space="preserve"><value>轉寄</value></data>
+  <data name="L67a981656d96.AutomationProperties.Name" xml:space="preserve"><value>刪除</value></data>
+  <data name="L720036dcce9d.Text" xml:space="preserve"><value>刪除</value></data>
+  <data name="L157ef9938f13.Text" xml:space="preserve"><value>選擇一封郵件開始閱讀</value></data>
+  <data name="L7c728df48032.Content" xml:space="preserve"><value>✎  寫郵件</value></data>
+  <data name="L1affb920290a.Content" xml:space="preserve"><value>詳情</value></data>
+  <data name="L319eb6acb5d3.ToolTipService.ToolTip" xml:space="preserve"><value>預覽附件</value></data>
+  <data name="L60c188608951.AutomationProperties.Name" xml:space="preserve"><value>附件操作</value></data>
+  <data name="L60c188608951.ToolTipService.ToolTip" xml:space="preserve"><value>附件操作</value></data>
+  <data name="L58039391a993.ToolTipService.ToolTip" xml:space="preserve"><value>返回郵件正文</value></data>
+  <data name="L58039391a993.AutomationProperties.Name" xml:space="preserve"><value>返回郵件正文</value></data>
+  <data name="L49f42ddb850f.Content" xml:space="preserve"><value>另存新檔</value></data>
+  <data name="La937543b2f29.Content" xml:space="preserve"><value>➤ 傳送</value></data>
+  <data name="Ld905362c2852.Content" xml:space="preserve"><value>儲存草稿</value></data>
+  <data name="L07537b77adc5.Content" xml:space="preserve"><value>捨棄</value></data>
+  <data name="L14ed52d17e36.Text" xml:space="preserve"><value>新增附件</value></data>
+  <data name="L2f315b693052.Text" xml:space="preserve"><value>AI 幫我寫</value></data>
+  <data name="L31603271372c.Text" xml:space="preserve"><value>寄件者</value></data>
+  <data name="L8cd484e0187e.PlaceholderText" xml:space="preserve"><value>請先設定郵箱</value></data>
+  <data name="L8cd484e0187e.AutomationProperties.Name" xml:space="preserve"><value>寄件者</value></data>
+  <data name="L74cc7bd98bc1.Text" xml:space="preserve"><value>收件者</value></data>
+  <data name="L6f5f80aa622e.PlaceholderText" xml:space="preserve"><value>輸入電子郵件地址</value></data>
+  <data name="L6f5f80aa622e.AutomationProperties.Name" xml:space="preserve"><value>收件者</value></data>
+  <data name="Lf2943979dbb5.Text" xml:space="preserve"><value>副本</value></data>
+  <data name="L9730dbead4e0.PlaceholderText" xml:space="preserve"><value>輸入副本地址</value></data>
+  <data name="L9730dbead4e0.AutomationProperties.Name" xml:space="preserve"><value>副本</value></data>
+  <data name="La1dbd72ab16b.Text" xml:space="preserve"><value>主旨</value></data>
+  <data name="L9e39db014f35.PlaceholderText" xml:space="preserve"><value>新增主旨</value></data>
+  <data name="L9e39db014f35.AutomationProperties.Name" xml:space="preserve"><value>主旨</value></data>
+  <data name="L9e05413a01ba.Text" xml:space="preserve"><value>內文</value></data>
+  <data name="L7fe7770999c5.PlaceholderText" xml:space="preserve"><value>字型</value></data>
+  <data name="L7fe7770999c5.AutomationProperties.Name" xml:space="preserve"><value>字型</value></data>
+  <data name="L6bc42b225024.PlaceholderText" xml:space="preserve"><value>字型大小</value></data>
+  <data name="L6bc42b225024.AutomationProperties.Name" xml:space="preserve"><value>字型大小</value></data>
+  <data name="L304b25effa82.ToolTipService.ToolTip" xml:space="preserve"><value>粗體</value></data>
+  <data name="L304b25effa82.AutomationProperties.Name" xml:space="preserve"><value>粗體</value></data>
+  <data name="Lfe9280a01a3c.ToolTipService.ToolTip" xml:space="preserve"><value>斜體</value></data>
+  <data name="Lfe9280a01a3c.AutomationProperties.Name" xml:space="preserve"><value>斜體</value></data>
+  <data name="L5d594060eadf.ToolTipService.ToolTip" xml:space="preserve"><value>底線</value></data>
+  <data name="L5d594060eadf.AutomationProperties.Name" xml:space="preserve"><value>底線</value></data>
+  <data name="L1295962af871.ToolTipService.ToolTip" xml:space="preserve"><value>項目符號</value></data>
+  <data name="L1295962af871.AutomationProperties.Name" xml:space="preserve"><value>項目符號</value></data>
+  <data name="Lc179acadf117.ToolTipService.ToolTip" xml:space="preserve"><value>編號清單</value></data>
+  <data name="Lc179acadf117.AutomationProperties.Name" xml:space="preserve"><value>編號清單</value></data>
+  <data name="L925b05478dc1.ToolTipService.ToolTip" xml:space="preserve"><value>插入表格</value></data>
+  <data name="L925b05478dc1.AutomationProperties.Name" xml:space="preserve"><value>插入表格</value></data>
+  <data name="L7e2871671432.ToolTipService.ToolTip" xml:space="preserve"><value>靠左對齊</value></data>
+  <data name="L7e2871671432.AutomationProperties.Name" xml:space="preserve"><value>靠左對齊</value></data>
+  <data name="L9052d0e98a39.ToolTipService.ToolTip" xml:space="preserve"><value>置中</value></data>
+  <data name="L9052d0e98a39.AutomationProperties.Name" xml:space="preserve"><value>置中</value></data>
+  <data name="Lc1ed28560e83.ToolTipService.ToolTip" xml:space="preserve"><value>靠右對齊</value></data>
+  <data name="Lc1ed28560e83.AutomationProperties.Name" xml:space="preserve"><value>靠右對齊</value></data>
+  <data name="L439b86bdf9f5.AutomationProperties.Name" xml:space="preserve"><value>郵件內文</value></data>
+  <data name="L73be9f028450.ToolTipService.ToolTip" xml:space="preserve"><value>移除附件</value></data>
+  <data name="L73be9f028450.AutomationProperties.Name" xml:space="preserve"><value>移除附件</value></data>
+  <data name="L32a8e1ee84df.Text" xml:space="preserve"><value>AI 助理</value></data>
+  <data name="L73aec99a4bc5.Text" xml:space="preserve"><value>尚未設定</value></data>
+  <data name="L40b5ca3764cf.Text" xml:space="preserve"><value>摘要此郵件</value></data>
+  <data name="L6e9796a58012.Text" xml:space="preserve"><value>回覆此郵件</value></data>
+  <data name="L447ed8d1d3ac.Text" xml:space="preserve"><value>告訴我你想了解什麼，或讓我幫你起草郵件。</value></data>
+  <data name="La11c4abd07cc.Text" xml:space="preserve"><value>草稿已準備好，要傳送嗎？</value></data>
+  <data name="La42d8d54f036.Content" xml:space="preserve"><value>傳送郵件</value></data>
+  <data name="L1736013b11b8.Content" xml:space="preserve"><value>繼續修改</value></data>
+  <data name="L6b73a12f408f.PlaceholderText" xml:space="preserve"><value>輸入問題或指令...</value></data>
+  <data name="L7b0d0eebb32c.ToolTipService.ToolTip" xml:space="preserve"><value>傳送給助理</value></data>
+  <data name="L7b0d0eebb32c.AutomationProperties.Name" xml:space="preserve"><value>傳送給助理</value></data>
+  <data name="L4445a81b6b78.ToolTipService.ToolTip" xml:space="preserve"><value>拖曳以調整欄位寬度</value></data>
+  <data name="L9ebe37008687.ToolTipService.ToolTip" xml:space="preserve"><value>拖曳以調整欄位寬度</value></data>
+  <data name="L9364ef5d02fb.ToolTipService.ToolTip" xml:space="preserve"><value>拖曳以調整欄位寬度</value></data>
+  <data name="Lcc193a97719a.ToolTipService.ToolTip" xml:space="preserve"><value>收合 AI 助理</value></data>
+  <data name="Lcc193a97719a.AutomationProperties.Name" xml:space="preserve"><value>收合 AI 助理</value></data>
+  <data name="L9ef7d87a1e35.ToolTipService.ToolTip" xml:space="preserve"><value>開啟 AI 助理</value></data>
+  <data name="L9ef7d87a1e35.AutomationProperties.Name" xml:space="preserve"><value>開啟 AI 助理</value></data>
+  <data name="FontYaHei.Content" xml:space="preserve"><value>微軟雅黑</value></data>
+  <data name="FontSimSun.Content" xml:space="preserve"><value>宋體</value></data>
+  <data name="FontSimHei.Content" xml:space="preserve"><value>黑體</value></data>
+  <data name="FontDengXian.Content" xml:space="preserve"><value>等線</value></data>
+</root>
+

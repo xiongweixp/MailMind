@@ -56,14 +56,14 @@ public sealed class SystemPreviewHost : IDisposable
                 CloseCore();
                 var extension = Path.GetExtension(attachment.Name).ToLowerInvariant();
                 if (extension.Length < 2 || extension.Length > 16 || extension.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || Array.IndexOf(Blocked, extension) >= 0)
-                    throw new InvalidOperationException("此附件类型不允许预览，请使用另存为。");
-                var clsid = FindHandler(extension) ?? throw new InvalidOperationException("系统未安装此格式的预览处理程序，请使用另存为。");
+                    throw new InvalidOperationException(Strings.Get("More_9c718678dedd"));
+                var clsid = FindHandler(extension) ?? throw new InvalidOperationException(Strings.Get("More_f76ea878382e"));
                 var directory = Path.Combine(PreviewCacheRoot(), "MailMind", "cache", "attachments");
                 Directory.CreateDirectory(directory);
                 var file = Path.Combine(directory, Convert.ToHexString(SHA256.HashData(attachment.Data)) + extension);
                 File.WriteAllBytes(file, attachment.Data);
                 var type = Type.GetTypeFromCLSID(clsid, true)!;
-                handlerObject = Activator.CreateInstance(type) ?? throw new InvalidOperationException("无法创建系统预览处理程序。");
+                handlerObject = Activator.CreateInstance(type) ?? throw new InvalidOperationException(Strings.Get("More_ce2072231a75"));
                 if (handlerObject is IObjectWithSite objectWithSite)
                 {
                     site = new PreviewSite(parent);
@@ -76,7 +76,7 @@ public sealed class SystemPreviewHost : IDisposable
                     try { streamInitializer.Initialize(stream, 0); }
                     finally { Marshal.ReleaseComObject(stream); }
                 }
-                else throw new InvalidOperationException("系统预览处理程序不支持此附件。");
+                else throw new InvalidOperationException(Strings.Get("More_540b07df5820"));
                 handler = (IPreviewHandler)handlerObject;
                 // An owned popup avoids WinUI's compositor covering native child windows.
                 owner = parent;
