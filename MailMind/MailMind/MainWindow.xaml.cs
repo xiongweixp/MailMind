@@ -24,11 +24,13 @@ public sealed partial class MainWindow : Window
     private DraftSnapshot? agentDraftSnapshot;
     private bool agentDraftModified;
     private readonly System.Threading.SemaphoreSlim decisionQueue = new(1, 1);
+    private readonly System.Collections.Generic.HashSet<Task> classificationTasks = new();
     private readonly System.Threading.CancellationTokenSource windowLifetime = new();
     private System.Threading.CancellationTokenSource? searchCancellation;
     private readonly System.Collections.Generic.List<MailItem> aiResults = new();
     private bool aiSearchShowing;
     private bool closing;
+    private bool closeReady;
     private static readonly string LayoutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailMind", "layout.json");
     private double expandedAiWidth = 320, dragStartX, dragFirstWidth, dragSecondWidth;
     private int activeSplitter = -1;
@@ -91,7 +93,7 @@ public sealed partial class MainWindow : Window
         windowSubclass = WindowMessage;
         if (!SetWindowSubclass(WinRT.Interop.WindowNative.GetWindowHandle(this), windowSubclass, 1, 0))
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-        AppWindow.Closing += (_, _) => { closing = true; mailSyncTimer.Stop(); searchCancellation?.Cancel(); windowLifetime.Cancel(); systemPreview?.Dispose(); };
+        AppWindow.Closing += Window_Closing;
         AppWindow.Changed += (_, _) => UpdatePreviewBounds();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragRegion);
@@ -170,8 +172,42 @@ public sealed partial class MainWindow : Window
         if (message == ncDestroy && windowSubclass != null) RemoveWindowSubclass(hwnd, windowSubclass, subclassId);
         return DefSubclassProc(hwnd, message, wParam, lParam);
     }
-    private async Task ClassifyAsync(MailItem item, bool force = false)
+    private void Window_Closing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
     {
+        if (closeReady) return;
+        args.Cancel = true;
+        if (closing) return;
+        closing = true;
+        mailSyncTimer.Stop();
+        searchCancellation?.Cancel();
+        windowLifetime.Cancel();
+        // Close only after this Closing event has returned, even if cancellation completes synchronously.
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            try { await Task.WhenAll(classificationTasks.ToArray()); }
+            catch (Exception) { /* Individual classification failures must not prevent closing. */ }
+            systemPreview?.Dispose();
+            closeReady = true;
+            Close();
+        });
+    }
+    private Task ClassifyAsync(MailItem item, bool force = false)
+    {
+        if (closing) return Task.CompletedTask;
+        var task = ClassifyCoreAsync(item, force);
+        classificationTasks.Add(task);
+        _ = ForgetClassificationAsync(task);
+        return task;
+    }
+    private async Task ForgetClassificationAsync(Task task)
+    {
+        try { await task; }
+        catch (Exception) { /* The classification task reports its own failure. */ }
+        finally { classificationTasks.Remove(task); }
+    }
+    private async Task ClassifyCoreAsync(MailItem item, bool force)
+    {
+        if (closing) return;
         var settings = decision.Settings;
         if (!settings.Enabled) { item.Importance = ""; return; }
         item.Importance = Strings.Get("Ui_4dcbbcfa6154");
@@ -179,9 +215,9 @@ public sealed partial class MainWindow : Window
         catch (OperationCanceledException) { return; }
         try
         {
-            if (!System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) || decision.Settings != settings) return;
+            if (closing || !System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) || decision.Settings != settings) return;
             var body = await mail.GetSearchBodyAsync(item, windowLifetime.Token);
-            if (!System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) || decision.Settings != settings) return;
+            if (closing || !System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) || decision.Settings != settings) return;
             var fingerprint = DecisionService.Fingerprint(settings, item, body);
             var cached = force ? null : mail.CachedClassification(item, fingerprint);
             if (cached != null) { item.Importance = cached; return; }
@@ -782,7 +818,7 @@ public sealed partial class MainWindow : Window
     private record AgentMessageView(TextBlock Text, Expander Thinking, TextBlock ThinkingText, ScrollViewer ThinkingScroll, ProgressRing Spinner, TextBlock ThinkingLabel);
     private void AgentMessages_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        DispatcherQueue.TryEnqueue(() => AgentScroll.ChangeView(null, AgentScroll.ScrollableHeight, null, true));
+        DispatcherQueue.TryEnqueue(() => { if (!closing) AgentScroll.ChangeView(null, AgentScroll.ScrollableHeight, null, true); });
     }
     private AgentMessageView AddAgentMessage(string label, string text)
     {
@@ -816,7 +852,7 @@ public sealed partial class MainWindow : Window
         time.Foreground = new SolidColorBrush(dark ? Windows.UI.Color.FromArgb(255, 179, 186, 197) : Windows.UI.Color.FromArgb(255, 120, 131, 153));
         message.Children.Add(time);
         AgentMessages.Children.Add(message);
-        DispatcherQueue.TryEnqueue(() => AgentScroll.ChangeView(null, AgentScroll.ScrollableHeight, null));
+        DispatcherQueue.TryEnqueue(() => { if (!closing) AgentScroll.ChangeView(null, AgentScroll.ScrollableHeight, null); });
         return new AgentMessageView(textBlock, thinking, thinkingText, thinkingScroll, spinner, thinkingLabel);
     }
     private void SetAgentThinking(AgentMessageView view, bool active)
@@ -836,7 +872,7 @@ public sealed partial class MainWindow : Window
             view.Thinking.Visibility = Visibility.Visible;
             bool follow = view.ThinkingScroll.VerticalOffset >= view.ThinkingScroll.ScrollableHeight - 2;
             view.ThinkingText.Text += value;
-            if (follow) DispatcherQueue.TryEnqueue(() => view.ThinkingScroll.ChangeView(null, view.ThinkingScroll.ScrollableHeight, null, true));
+            if (follow) DispatcherQueue.TryEnqueue(() => { if (!closing) view.ThinkingScroll.ChangeView(null, view.ThinkingScroll.ScrollableHeight, null, true); });
         }
     }
     private void UpdateAgentModelLabel() => AgentModelLabel.Text = string.IsNullOrWhiteSpace(decision.Settings.ChatModel) ? Strings.Get("Ui_63595e95b708") : decision.Settings.ChatModel + Strings.Get("Ui_d7969271e099");
@@ -902,10 +938,13 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { if (!closing) AgentMarkdown.Render(responseView.Text, agentDraftModified ? Strings.Get("More_389b6373e09a") + ex.Message : Strings.Get("Ui_dc52d35e8299") + ex.Message); }
         finally
         {
-            SetAgentThinking(responseView, false);
-            AgentSendButton.IsEnabled = true;
-            if (!closing && agentDraftModified && ComposeWorkspace.Visibility == Visibility.Visible && string.IsNullOrWhiteSpace(AgentInput.Text))
-                AgentSendConfirmation.Visibility = Visibility.Visible;
+            if (!closing)
+            {
+                SetAgentThinking(responseView, false);
+                AgentSendButton.IsEnabled = true;
+                if (agentDraftModified && ComposeWorkspace.Visibility == Visibility.Visible && string.IsNullOrWhiteSpace(AgentInput.Text))
+                    AgentSendConfirmation.Visibility = Visibility.Visible;
+            }
         }
     }
     private async Task<DraftSnapshot> GetDraftSnapshotAsync()
@@ -1070,7 +1109,7 @@ public sealed partial class MainWindow : Window
         }
         catch (OperationCanceledException) when (closing) { }
         catch (Exception ex) { if (!closing) AgentMarkdown.Render(responseView.Text, Strings.Get("Ui_dc52d35e8299") + ex.Message); }
-        finally { SetAgentThinking(responseView, false); AgentSendButton.IsEnabled = true; }
+        finally { if (!closing) { SetAgentThinking(responseView, false); AgentSendButton.IsEnabled = true; } }
     }
     private async Task ApplyAgentDraftAsync(ComposeSkillArguments draft)
     {
@@ -1360,6 +1399,7 @@ public sealed partial class MainWindow : Window
             {
                 modelStatus.Text = Strings.Get("Ui_b66432e5ffb0");
                 var models = await decision.ListModelsAsync(engine.SelectedItem?.ToString() ?? "LM Studio", number, windowLifetime.Token);
+                if (closing) return;
                 model.Items.Clear(); chatModel.Items.Clear();
                 foreach (var entry in models)
                 {
@@ -1372,8 +1412,8 @@ public sealed partial class MainWindow : Window
                 else if (chatModel.Items.Count > 0) chatModel.SelectedIndex = 0;
                 modelStatus.Text = string.Format(Strings.Get("Fmt_c5a7c143ddeb"), model.Items.Count, chatModel.Items.Count);
             }
-            catch (Exception ex) { modelStatus.Text = Strings.Get("Ui_90a2379b7c07") + ex.Message; }
-            finally { refreshModels.IsEnabled = true; }
+            catch (Exception ex) { if (!closing) modelStatus.Text = Strings.Get("Ui_90a2379b7c07") + ex.Message; }
+            finally { if (!closing) refreshModels.IsEnabled = true; }
         }
         refreshModels.Click += async (_, _) => await RefreshModelsAsync();
         engine.SelectionChanged += async (_, _) => { aiPort.Text = engine.SelectedIndex == 0 ? "1234" : "13305"; await RefreshModelsAsync(); };
@@ -1408,10 +1448,10 @@ public sealed partial class MainWindow : Window
             try
             {
                 var items = System.Linq.Enumerable.ToArray(messages);
-                for (int i = 0; i < items.Length; i++) { error.Text = string.Format(Strings.Get("Fmt_2803a43bd7a7"), i + 1, items.Length); await ClassifyAsync(items[i], true); }
-                error.Text = string.Format(Strings.Get("Fmt_99bc0ca14c3a"), items.Length);
+                for (int i = 0; i < items.Length && !closing; i++) { error.Text = string.Format(Strings.Get("Fmt_2803a43bd7a7"), i + 1, items.Length); await ClassifyAsync(items[i], true); }
+                if (!closing) error.Text = string.Format(Strings.Get("Fmt_99bc0ca14c3a"), items.Length);
             }
-            finally { relabel.IsEnabled = true; }
+            finally { if (!closing) relabel.IsEnabled = true; }
         };
         cancel.Click += (_, _) => dialog.Hide();
         save.Click += async (_, _) =>
@@ -1426,7 +1466,8 @@ public sealed partial class MainWindow : Window
                     if (settings.Enabled)
                     {
                         error.Text = Strings.Get("Ui_7f7b8e27000f");
-                        await decision.ClassifyAsync(settings, new MailItem(0, "test@example.com", "Meeting tomorrow", "", "Please confirm your availability.", true), "Please confirm your availability.");
+                        await decision.ClassifyAsync(settings, new MailItem(0, "test@example.com", "Meeting tomorrow", "", "Please confirm your availability.", true), "Please confirm your availability.", windowLifetime.Token);
+                        if (closing) return;
                     }
                     decision.Save(settings);
                     UpdateAgentModelLabel();
@@ -1438,8 +1479,8 @@ public sealed partial class MainWindow : Window
                 var candidate = new MailAccount(address.Text.Trim(), string.IsNullOrWhiteSpace(user.Text) ? address.Text.Trim() : user.Text.Trim(), host.Text.Trim(), number, ssl.IsChecked != true, smtpHost.Text.Trim(), smtpNumber, smtpSsl.IsChecked != true);
                 error.Text = Strings.Get("Ui_0c2a21faf748"); await mail.TestAsync(candidate, secret.Password); mail.Save(candidate, secret.Password); folderInitialized = false; ShowAccount(candidate.Address); saved = true; dialog.Hide();
             }
-            catch (Exception ex) { error.Text = Strings.Get("Ui_a43d8b375652") + ex.Message; }
-            finally { save.IsEnabled = true; cancel.IsEnabled = true; }
+            catch (Exception ex) { if (!closing) error.Text = Strings.Get("Ui_a43d8b375652") + ex.Message; }
+            finally { if (!closing) { save.IsEnabled = true; cancel.IsEnabled = true; } }
         };
         await dialog.ShowAsync();
         if (saved) await LoadFoldersAsync();

@@ -123,7 +123,7 @@ public sealed class SystemPreviewHost : IDisposable
             var rect = new RECT { right = Math.Max(width, 1), bottom = Math.Max(height, 1) };
             handler.SetRect(ref rect);
         }
-        catch (Exception ex) when (ex is COMException or System.ComponentModel.Win32Exception) { }
+        catch (Exception ex) when (ex is COMException or ArgumentException or System.ComponentModel.Win32Exception) { }
     });
     private POINT ScreenPosition(int x, int y)
     {
