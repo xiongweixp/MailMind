@@ -245,6 +245,7 @@ public sealed class MailService
                 SetIdentity(item, selected.Address, path, currentValidity);
                 item.HasAttachments = summary.Body != null ? summary.Attachments.Any() : previous?.HasAttachments;
                 cache.Put(selected.Address, path, currentValidity, item);
+                if (summary.Envelope != null) cache.PutRecipients(item, summary.Envelope.To?.ToString() ?? "", summary.Envelope.Cc?.ToString() ?? "");
                 cache.PutAttachmentFlag(item);
                 if ((cache.HtmlVersion(selected.Address, path, currentValidity, uid) >= 2 || cache.Body(selected.Address, path, currentValidity, uid) != null) && cache.HasAttachmentSet(item)) continue;
                 var message = await remote.GetMessageAsync(summary.UniqueId, token);
@@ -434,6 +435,8 @@ public sealed class MailService
     }
     public async Task<(string To, string Cc)> GetRecipientsAsync(MailItem item)
     {
+        var cached = cache.Recipients(item);
+        if (cached.HasValue) return cached.Value;
         if (account == null || account.Address != item.Account || string.IsNullOrEmpty(password)) throw new InvalidOperationException(Strings.Get("More_96055ce0ed7d"));
         using var client = new ImapClient();
         await ConnectAsync(client, account, password);
@@ -441,7 +444,10 @@ public sealed class MailService
         if (selectedFolder.UidValidity != item.Validity) throw new InvalidOperationException(Strings.Get("More_1ab279dc6512"));
         var summaries = await selectedFolder.FetchAsync(new[] { new UniqueId(item.Uid) }, MessageSummaryItems.Envelope);
         var envelope = summaries.FirstOrDefault()?.Envelope;
-        return (envelope?.To?.ToString() ?? "", envelope?.Cc?.ToString() ?? "");
+        if (envelope == null) throw new InvalidDataException("The server did not return the message envelope.");
+        var result = (envelope.To?.ToString() ?? "", envelope.Cc?.ToString() ?? "");
+        cache.PutRecipients(item, result.Item1, result.Item2);
+        return result;
     }
     public async Task<MailBody> GetBodyAsync(uint uid)
     {

@@ -27,12 +27,14 @@ CREATE TABLE IF NOT EXISTS attachments (account TEXT NOT NULL, folder TEXT NOT N
         using var migration = db.CreateCommand();
         migration.CommandText = "PRAGMA table_info(messages)";
         using var columns = migration.ExecuteReader();
-        bool hasHtml = false, hasSeen = false, hasHtmlVersion = false;
-        while (columns.Read()) { if (columns.GetString(1) == "html_body") hasHtml = true; if (columns.GetString(1) == "is_seen") hasSeen = true; if (columns.GetString(1) == "html_version") hasHtmlVersion = true; }
+        bool hasHtml = false, hasSeen = false, hasHtmlVersion = false, hasRecipients = false, hasCc = false;
+        while (columns.Read()) { if (columns.GetString(1) == "html_body") hasHtml = true; if (columns.GetString(1) == "is_seen") hasSeen = true; if (columns.GetString(1) == "html_version") hasHtmlVersion = true; if (columns.GetString(1) == "recipients") hasRecipients = true; if (columns.GetString(1) == "cc") hasCc = true; }
         columns.Close();
         if (!hasHtml) { migration.CommandText = "ALTER TABLE messages ADD COLUMN html_body TEXT"; migration.ExecuteNonQuery(); }
         if (!hasSeen) { migration.CommandText = "ALTER TABLE messages ADD COLUMN is_seen INTEGER"; migration.ExecuteNonQuery(); }
         if (!hasHtmlVersion) { migration.CommandText = "ALTER TABLE messages ADD COLUMN html_version INTEGER NOT NULL DEFAULT 0"; migration.ExecuteNonQuery(); }
+        if (!hasRecipients) { migration.CommandText = "ALTER TABLE messages ADD COLUMN recipients TEXT"; migration.ExecuteNonQuery(); }
+        if (!hasCc) { migration.CommandText = "ALTER TABLE messages ADD COLUMN cc TEXT"; migration.ExecuteNonQuery(); }
         migration.CommandText = "CREATE TABLE IF NOT EXISTS attachment_flags (account TEXT NOT NULL, folder TEXT NOT NULL, validity INTEGER NOT NULL, uid INTEGER NOT NULL, has_attachments INTEGER NOT NULL, PRIMARY KEY(account,folder,validity,uid))"; migration.ExecuteNonQuery();
         migration.CommandText = "INSERT OR IGNORE INTO attachment_flags SELECT s.account,s.folder,s.validity,s.uid,EXISTS(SELECT 1 FROM attachments a WHERE a.account=s.account AND a.folder=s.folder AND a.validity=s.validity AND a.uid=s.uid) FROM attachment_sets s"; migration.ExecuteNonQuery();
     }
@@ -97,6 +99,21 @@ ORDER BY m.date DESC,m.folder,m.uid DESC LIMIT $limit OFFSET $offset";
     public void PutAttachmentFlag(MailItem item) { if (!item.HasAttachments.HasValue) return; using var db=Open(); using var c=db.CreateCommand(); Key(c,item.Account,item.Folder,item.Validity,item.Uid); c.CommandText="INSERT OR REPLACE INTO attachment_flags VALUES($a,$f,$v,$u,$h)"; c.Parameters.AddWithValue("$h",item.HasAttachments.Value ? 1 : 0); c.ExecuteNonQuery(); }
     public void Put(string account,string folder,uint validity,MailItem item) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="INSERT INTO messages(account,folder,validity,uid,sender,subject,date,preview,is_seen) VALUES($a,$f,$v,$u,$s,$t,$d,$p,$seen) ON CONFLICT(account,folder,validity,uid) DO UPDATE SET sender=$s,subject=$t,date=$d,preview=$p,is_seen=$seen"; Key(c,account,folder,validity,item.Uid); c.Parameters.AddWithValue("$s",item.Sender); c.Parameters.AddWithValue("$t",item.Subject); c.Parameters.AddWithValue("$d",item.Date); c.Parameters.AddWithValue("$p",item.Preview); c.Parameters.AddWithValue("$seen",item.IsSeen.HasValue ? (object)(item.IsSeen.Value ? 1 : 0) : DBNull.Value); c.ExecuteNonQuery(); }
     public string? Body(string account,string folder,uint validity,uint uid) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT body FROM messages WHERE account=$a AND folder=$f AND validity=$v AND uid=$u"; Key(c,account,folder,validity,uid); var value=c.ExecuteScalar(); return value is string body ? body : null; }
+    public (string To, string Cc)? Recipients(MailItem item)
+    {
+        using var db = Open(); using var c = db.CreateCommand();
+        c.CommandText = "SELECT recipients,cc FROM messages WHERE account=$a AND folder=$f AND validity=$v AND uid=$u";
+        Key(c, item.Account, item.Folder, item.Validity, item.Uid);
+        using var r = c.ExecuteReader();
+        return r.Read() && !r.IsDBNull(0) && !r.IsDBNull(1) ? (r.GetString(0), r.GetString(1)) : null;
+    }
+    public void PutRecipients(MailItem item, string to, string cc)
+    {
+        using var db = Open(); using var c = db.CreateCommand();
+        c.CommandText = "UPDATE messages SET recipients=$to,cc=$cc WHERE account=$a AND folder=$f AND validity=$v AND uid=$u";
+        Key(c, item.Account, item.Folder, item.Validity, item.Uid);
+        c.Parameters.AddWithValue("$to", to); c.Parameters.AddWithValue("$cc", cc); c.ExecuteNonQuery();
+    }
     public void PutBody(string account,string folder,uint validity,uint uid,string body) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="UPDATE messages SET body=$b WHERE account=$a AND folder=$f AND validity=$v AND uid=$u"; Key(c,account,folder,validity,uid); c.Parameters.AddWithValue("$b",body); c.ExecuteNonQuery(); }
     public string? HtmlBody(string account,string folder,uint validity,uint uid) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT html_body FROM messages WHERE account=$a AND folder=$f AND validity=$v AND uid=$u"; Key(c,account,folder,validity,uid); return c.ExecuteScalar() as string; }
     public int HtmlVersion(string account,string folder,uint validity,uint uid) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT html_version FROM messages WHERE account=$a AND folder=$f AND validity=$v AND uid=$u"; Key(c,account,folder,validity,uid); return Convert.ToInt32(c.ExecuteScalar() ?? 0); }

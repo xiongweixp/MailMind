@@ -6,6 +6,10 @@ namespace MailMind;
 
 public static class HtmlTextExtractor
 {
+    public static string NormalizeSpaceEntities(string text) => System.Text.RegularExpressions.Regex.Replace(
+        text, @"&(?:nbsp|#0*160|#x0*a0);", " ",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
     public static string Extract(string html)
     {
         var output = new StringBuilder();

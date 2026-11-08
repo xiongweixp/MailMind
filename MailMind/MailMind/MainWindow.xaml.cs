@@ -456,7 +456,7 @@ public sealed partial class MainWindow : Window
         else { ReadSenderName.Text = item.DisplaySender; ReadSenderAddress.Text = ""; }
         if (item.IsSeen != true) _ = MarkSeenAsync(item);
         _ = LoadRecipientsAsync(item);
-        try { var body = await mail.GetBodyAsync(item.Uid); if (!closing && ReferenceEquals(MailList.SelectedItem, item)) { if (body.IsHtml) await ShowHtmlAsync(body.Content, item); else ReadBody.Text = body.Content; } }
+        try { var body = await mail.GetBodyAsync(item.Uid); if (!closing && ReferenceEquals(MailList.SelectedItem, item)) { if (body.IsHtml) await ShowHtmlAsync(body.Content, item); else ReadBody.Text = HtmlTextExtractor.NormalizeSpaceEntities(body.Content); } }
         catch (Exception ex) { if (!closing && ReferenceEquals(MailList.SelectedItem, item)) ReadBody.Text = Strings.Get("Ui_c16dba311cc6") + ex.Message; }
         try
         {
@@ -1143,7 +1143,7 @@ public sealed partial class MainWindow : Window
             ToBox.Text = draft.To; CcBox.Text = draft.Cc; SubjectBox.Text = draft.Subject;
             string header = System.Net.WebUtility.HtmlEncode(string.Format(Strings.Get("Fmt_dc844c6a6503"), draft.Date, draft.Sender));
             // Some messages contain HTML space entities even in their plain-text part.
-            string quoteText = System.Text.RegularExpressions.Regex.Replace(draft.Text, @"&(?:nbsp|#160|#x0*a0);", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+            string quoteText = HtmlTextExtractor.NormalizeSpaceEntities(draft.Text);
             string quoted = System.Net.WebUtility.HtmlEncode(quoteText);
             string html = $"<p><br></p><p data-mailmind-quote>{header}</p><blockquote data-mailmind-quote style='margin:0 0 0 8px;padding-left:12px;border-left:2px solid #c8d1de;white-space:pre-wrap'>{quoted}</blockquote>";
             await BodyBox.CoreWebView2.ExecuteScriptAsync($"document.body.innerHTML = {System.Text.Json.JsonSerializer.Serialize(html)}; window.getSelection().collapse(document.body.firstChild, 0); document.body.focus();");
