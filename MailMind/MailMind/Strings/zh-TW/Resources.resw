@@ -12,7 +12,7 @@
   <data name="L90406df61d59.Text" xml:space="preserve"><value>尚未新增郵箱</value></data>
   <data name="Ld1e43a452306.Text" xml:space="preserve"><value>尚未連接郵箱</value></data>
   <data name="L66318d2d0d82.Text" xml:space="preserve"><value>通訊錄</value></data>
-  <data name="L725cc71ba3bb.Content" xml:space="preserve"><value>⚙   設定</value></data>
+  <data name="L725cc71ba3bb.Text" xml:space="preserve"><value>設定</value></data>
   <data name="Lae7b06edb77b.PlaceholderText" xml:space="preserve"><value>搜尋郵件</value></data>
   <data name="Lae7b06edb77b.AutomationProperties.Name" xml:space="preserve"><value>搜尋郵件</value></data>
   <data name="Lb94351cb1efa.ToolTipService.ToolTip" xml:space="preserve"><value>按日期篩選已載入郵件</value></data>

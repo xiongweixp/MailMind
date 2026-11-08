@@ -12,7 +12,7 @@
   <data name="L90406df61d59.Text" xml:space="preserve"><value>No account added</value></data>
   <data name="Ld1e43a452306.Text" xml:space="preserve"><value>No account connected</value></data>
   <data name="L66318d2d0d82.Text" xml:space="preserve"><value>Contacts</value></data>
-  <data name="L725cc71ba3bb.Content" xml:space="preserve"><value>⚙   Settings</value></data>
+  <data name="L725cc71ba3bb.Text" xml:space="preserve"><value>Settings</value></data>
   <data name="Lae7b06edb77b.PlaceholderText" xml:space="preserve"><value>Search mail</value></data>
   <data name="Lae7b06edb77b.AutomationProperties.Name" xml:space="preserve"><value>Search mail</value></data>
   <data name="Lb94351cb1efa.ToolTipService.ToolTip" xml:space="preserve"><value>Filter loaded mail by date</value></data>
