@@ -806,6 +806,7 @@ public sealed partial class MainWindow : Window
     }
     private async void Refresh_Click(object sender, RoutedEventArgs e) { if (mail.Account != null) await LoadFoldersAsync(); }
     private bool composeReady, sending;
+    private readonly System.Threading.SemaphoreSlim mailtoQueue = new(1, 1);
     private bool preparingReply;
     private ReplyDraft? replyDraft;
     private int sendStatusVersion;
@@ -1125,6 +1126,54 @@ public sealed partial class MainWindow : Window
         replyDraft = null;
         ToBox.Text = draft.to ?? ""; CcBox.Text = draft.cc ?? ""; SubjectBox.Text = draft.subject ?? "";
         await BodyBox.CoreWebView2.ExecuteScriptAsync($"document.body.innerText = {System.Text.Json.JsonSerializer.Serialize(draft.body ?? "")};");
+    }
+    public async Task OpenMailtoAsync(Uri uri)
+    {
+        await mailtoQueue.WaitAsync();
+        try
+        {
+            if (sending || preparingReply) return;
+            if (ComposeWorkspace.Visibility == Visibility.Visible)
+            {
+                string existingBody = composeReady ? await EditorValueAsync("document.body.innerText") : "";
+                string existingHtml = composeReady ? await EditorValueAsync("document.body.innerHTML") : "";
+                if (!string.IsNullOrWhiteSpace(ToBox.Text + CcBox.Text + SubjectBox.Text + existingBody) || existingHtml.Contains("<table", StringComparison.OrdinalIgnoreCase) || composeAttachments.Count > 0)
+                {
+                    var dialog = new ContentDialog { XamlRoot = ComposeWorkspace.XamlRoot, Title = Strings.Get("Ui_0efdb1f0b8f3"), Content = Strings.Get("Ui_f4694e9308ee"), PrimaryButtonText = Strings.Get("Ui_ea4899468cae"), CloseButtonText = Strings.Get("Ui_3a481bc7646e") };
+                    if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+                }
+                await ClearComposeAsync();
+            }
+            string raw = uri.OriginalString;
+            int queryStart = raw.IndexOf('?');
+            string to = Uri.UnescapeDataString(raw.Substring(raw.IndexOf(':') + 1, (queryStart < 0 ? raw.Length : queryStart) - raw.IndexOf(':') - 1));
+            string cc = "", subject = "", body = "";
+            bool hasBcc = false;
+            if (queryStart >= 0)
+            {
+                foreach (string part in raw[(queryStart + 1)..].Split('&', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    int equals = part.IndexOf('=');
+                    string name = Uri.UnescapeDataString(equals < 0 ? part : part[..equals]);
+                    string value = Uri.UnescapeDataString(equals < 0 ? "" : part[(equals + 1)..]);
+                    switch (name.ToLowerInvariant())
+                    {
+                        case "to": to = string.Join(", ", new[] { to, value }.Where(s => !string.IsNullOrWhiteSpace(s))); break;
+                        case "cc": cc = string.Join(", ", new[] { cc, value }.Where(s => !string.IsNullOrWhiteSpace(s))); break;
+                        case "subject": subject = value; break;
+                        case "body": body = value; break;
+                        case "bcc": hasBcc |= !string.IsNullOrWhiteSpace(value); break;
+                    }
+                }
+            }
+            await OpenComposeAsync();
+            if (!composeReady || closing) return;
+            ToBox.Text = to; CcBox.Text = cc; SubjectBox.Text = subject;
+            await BodyBox.CoreWebView2.ExecuteScriptAsync($"document.body.innerText = {JsonSerializer.Serialize(body)};");
+            if (hasBcc) await ShowNotice("MailMind", "This mailto link contains Bcc recipients, which MailMind does not currently support. They have not been added.");
+        }
+        catch (Exception ex) { if (!closing) await ShowNotice("MailMind", ex.Message); }
+        finally { mailtoQueue.Release(); }
     }
     private async Task OpenComposeAsync()
     {

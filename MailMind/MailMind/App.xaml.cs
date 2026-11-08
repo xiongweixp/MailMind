@@ -47,8 +47,30 @@ namespace MailMind
         /// <param name="args">Details about the launch request and process.</param>
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
-            _window = new MainWindow();
+            var window = new MainWindow();
+            _window = window;
             _window.Activate();
+            Program.ActivationPending = () => window.DispatcherQueue.TryEnqueue(ProcessPendingActivations);
+            HandleActivation(Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs());
+            ProcessPendingActivations();
+        }
+
+        private void ProcessPendingActivations()
+        {
+            while (Program.TryDequeue(out var activation))
+                if (activation != null) HandleActivation(activation);
+        }
+
+        private void HandleActivation(Microsoft.Windows.AppLifecycle.AppActivationArguments activation)
+        {
+            var window = (MainWindow)_window!;
+            window.AppWindow.Show();
+            window.Activate();
+            if (activation.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol &&
+                activation.Data is IProtocolActivatedEventArgs protocol && protocol.Uri.Scheme.Equals("mailto", StringComparison.OrdinalIgnoreCase))
+            {
+                window.DispatcherQueue.TryEnqueue(async () => await window.OpenMailtoAsync(protocol.Uri));
+            }
         }
     }
 }

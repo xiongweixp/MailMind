@@ -55,6 +55,8 @@ MailMind 支持直接预览附件，并可另存附件。可预览的格式取�
 
 使用 Visual Studio 打开 `MailMind.slnx`，还原 NuGet 包，选择设备对应的平台并运行。打开“配置”，填写 IMAP 和 SMTP 信息并保存；AI 功能按上文单独配置。
 
+要通过邮件链接打开写信窗口，请安装 MailMind 的 MSIX 安装包，然后在 Windows“设置 → 应用 → 默认应用”中搜索 MailMind，将 `MAILTO` 关联设为 MailMind。邮件链接支持预填收件人、抄送、主题和正文；当前不支持密送，链接包含密送时会提示。
+
 账户配置、AI 设置和邮件缓存位于 `%LOCALAPPDATA%\MailMind`；邮箱密码或授权码保存在 Windows 凭据管理器中。缓存可能包含邮件正文和附件，请妥善保护设备及备份。
 
 ## 计划
