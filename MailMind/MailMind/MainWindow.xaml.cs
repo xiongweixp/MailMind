@@ -350,6 +350,7 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.ButtonInactiveForegroundColor = dark ? Windows.UI.Color.FromArgb(255, 165, 165, 165) : Microsoft.UI.Colors.Gray;
         UpdateFolderSelection(folder);
         UpdateDateFilterColor();
+        UpdateAgentMessageColors();
         if (composeReady) _ = UpdateComposeThemeAsync();
         if (displayedHtml != null && HtmlView.Visibility == Visibility.Visible) RenderHtml(displayedHtml);
     }
@@ -1091,7 +1092,21 @@ public sealed partial class MainWindow : Window
         UpdateFolderSelection(folder);
         if (!sending && !preparingReply) await OpenComposeAsync();
     }
-    private record AgentMessageView(TextBlock Text, Expander Thinking, TextBlock ThinkingText, ScrollViewer ThinkingScroll, ProgressRing Spinner, TextBlock ThinkingLabel);
+    private record AgentMessageView(TextBlock Text, Expander Thinking, TextBlock ThinkingText, ScrollViewer ThinkingScroll, ProgressRing Spinner, TextBlock ThinkingLabel, Border Bubble, TextBlock Time, bool Assistant);
+    private readonly System.Collections.Generic.List<AgentMessageView> agentMessageViews = new();
+    private void UpdateAgentMessageColors()
+    {
+        bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
+        foreach (var view in agentMessageViews)
+        {
+            view.Bubble.Background = new SolidColorBrush(view.Assistant ? (dark ? Windows.UI.Color.FromArgb(255, 73, 58, 39) : Windows.UI.Color.FromArgb(255, 255, 245, 229)) : (dark ? Windows.UI.Color.FromArgb(255, 48, 62, 80) : Windows.UI.Color.FromArgb(255, 238, 244, 255)));
+            var foreground = new SolidColorBrush(dark ? Windows.UI.Color.FromArgb(255, 242, 243, 245) : Windows.UI.Color.FromArgb(255, 23, 35, 58));
+            view.Text.Foreground = foreground;
+            view.ThinkingText.Foreground = foreground;
+            view.ThinkingLabel.Foreground = foreground;
+            view.Time.Foreground = new SolidColorBrush(dark ? Windows.UI.Color.FromArgb(255, 179, 186, 197) : Windows.UI.Color.FromArgb(255, 120, 131, 153));
+        }
+    }
     private void AgentMessages_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         DispatcherQueue.TryEnqueue(() => { if (!closing) AgentScroll.ChangeView(null, AgentScroll.ScrollableHeight, null, true); });
@@ -1099,7 +1114,6 @@ public sealed partial class MainWindow : Window
     private AgentMessageView AddAgentMessage(string label, string text)
     {
         bool assistant = label == Strings.Get("Ui_5341ec296262");
-        bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
         var message = new StackPanel { Spacing = 4 };
         var row = new Grid { ColumnSpacing = 8 };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = assistant ? GridLength.Auto : new GridLength(1, GridUnitType.Star) });
@@ -1121,15 +1135,16 @@ public sealed partial class MainWindow : Window
         if (assistant) contents.Children.Add(thinking);
         contents.Children.Add(textBlock);
         var bubble = new Border { CornerRadius = new CornerRadius(12), Padding = new Thickness(14, 10, 14, 10), Child = contents };
-        bubble.Background = new SolidColorBrush(assistant ? (dark ? Windows.UI.Color.FromArgb(255, 73, 58, 39) : Windows.UI.Color.FromArgb(255, 255, 245, 229)) : (dark ? Windows.UI.Color.FromArgb(255, 48, 62, 80) : Windows.UI.Color.FromArgb(255, 238, 244, 255)));
         Grid.SetColumn(avatar, assistant ? 0 : 1); Grid.SetColumn(bubble, assistant ? 1 : 0);
         row.Children.Add(avatar); row.Children.Add(bubble); message.Children.Add(row);
         var time = new TextBlock { Text = DateTime.Now.ToString("HH:mm"), FontSize = 11, HorizontalAlignment = HorizontalAlignment.Right };
-        time.Foreground = new SolidColorBrush(dark ? Windows.UI.Color.FromArgb(255, 179, 186, 197) : Windows.UI.Color.FromArgb(255, 120, 131, 153));
         message.Children.Add(time);
         AgentMessages.Children.Add(message);
         DispatcherQueue.TryEnqueue(() => { if (!closing) AgentScroll.ChangeView(null, AgentScroll.ScrollableHeight, null); });
-        return new AgentMessageView(textBlock, thinking, thinkingText, thinkingScroll, spinner, thinkingLabel);
+        var view = new AgentMessageView(textBlock, thinking, thinkingText, thinkingScroll, spinner, thinkingLabel, bubble, time, assistant);
+        agentMessageViews.Add(view);
+        UpdateAgentMessageColors();
+        return view;
     }
     private void SetAgentThinking(AgentMessageView view, bool active)
     {
