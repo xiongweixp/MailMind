@@ -91,6 +91,7 @@ public sealed partial class MainWindow : Window
     private TextBox? previewText;
     private WebView2? previewMarkdown;
     private bool previewMarkdownConfigured;
+    private string? previewMarkdownUri, previewMarkdownDocument;
     private static readonly Markdig.MarkdownPipeline MarkdownPipeline = new Markdig.MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build();
     private readonly System.Collections.Generic.Dictionary<string, string> htmlDocuments = new();
     private string? displayedHtml;
@@ -715,24 +716,33 @@ public sealed partial class MainWindow : Window
                     if (!ReferenceEquals(previewAttachment, attachment)) return;
                     if (!previewMarkdownConfigured)
                     {
-                    previewMarkdown.CoreWebView2.Settings.IsScriptEnabled = false;
-                    previewMarkdown.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-                    previewMarkdown.CoreWebView2.AddWebResourceRequestedFilter("*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All);
-                    previewMarkdown.CoreWebView2.WebResourceRequested += (_, args) =>
-                    {
-                        if (args.Request.Uri != "about:blank")
-                            args.Response = previewMarkdown.CoreWebView2.Environment.CreateWebResourceResponse(null, 403, "Forbidden", "");
-                    };
-                    previewMarkdown.CoreWebView2.NavigationStarting += (_, args) => { if (!args.Uri.StartsWith("about:blank", StringComparison.OrdinalIgnoreCase)) args.Cancel = true; };
-                    previewMarkdown.CoreWebView2.NavigationCompleted += (_, args) =>
-                    {
-                        if (!args.IsSuccess && previewAttachment?.IsText == true && previewMarkdown.Visibility == Visibility.Visible)
-                            PreviewMessage.Text = Strings.Get("Ui_ec7a12771f38") + args.WebErrorStatus;
-                    };
-                    previewMarkdownConfigured = true;
+                        previewMarkdown.CoreWebView2.Settings.IsScriptEnabled = false;
+                        previewMarkdown.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+                        previewMarkdown.CoreWebView2.AddWebResourceRequestedFilter("*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All);
+                        previewMarkdown.CoreWebView2.WebResourceRequested += (_, args) =>
+                        {
+                            if (args.Request.Uri == previewMarkdownUri && previewMarkdownDocument != null)
+                            {
+                                var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(previewMarkdownDocument));
+                                args.Response = previewMarkdown.CoreWebView2.Environment.CreateWebResourceResponse(stream.AsRandomAccessStream(), 200, "OK", "Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store");
+                            }
+                            else args.Response = previewMarkdown.CoreWebView2.Environment.CreateWebResourceResponse(null, 403, "Forbidden", "");
+                        };
+                        previewMarkdown.CoreWebView2.NavigationStarting += (_, args) =>
+                        {
+                            if (args.Uri != previewMarkdownUri && !args.Uri.StartsWith("about:blank", StringComparison.OrdinalIgnoreCase)) args.Cancel = true;
+                        };
+                        previewMarkdown.CoreWebView2.NavigationCompleted += (_, args) =>
+                        {
+                            if (!args.IsSuccess && args.WebErrorStatus != Microsoft.Web.WebView2.Core.CoreWebView2WebErrorStatus.OperationCanceled && previewAttachment?.IsText == true && previewMarkdown.Visibility == Visibility.Visible)
+                                PreviewMessage.Text = Strings.Get("Ui_ec7a12771f38") + args.WebErrorStatus;
+                        };
+                        previewMarkdownConfigured = true;
                     }
                     var html = Markdig.Markdown.ToHtml(content, MarkdownPipeline);
-                    previewMarkdown.NavigateToString("<!doctype html><html><head><meta charset='utf-8'><style>body{font:16px 'Segoe UI',sans-serif;line-height:1.6;max-width:900px;margin:32px auto;padding:0 24px;color:#24292f;background:#fff}pre,code{font-family:Consolas,monospace;background:#f1f3f5}pre{padding:16px;overflow:auto}code{padding:2px 4px}pre code{padding:0}table{border-collapse:collapse}th,td{border:1px solid #d0d7de;padding:6px 13px}blockquote{border-left:4px solid #d0d7de;color:#57606a;margin-left:0;padding-left:16px}img{max-width:100%}</style></head><body>" + html + "</body></html>");
+                    previewMarkdownDocument = "<!doctype html><html><head><meta charset='utf-8'><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>body{font:16px 'Segoe UI',sans-serif;line-height:1.6;max-width:900px;margin:32px auto;padding:0 24px;color:#24292f;background:#fff}pre,code{font-family:Consolas,monospace;background:#f1f3f5}pre{padding:16px;overflow:auto}code{padding:2px 4px}pre code{padding:0}table{border-collapse:collapse}th,td{border:1px solid #d0d7de;padding:6px 13px}blockquote{border-left:4px solid #d0d7de;color:#57606a;margin-left:0;padding-left:16px}img{max-width:100%}</style></head><body>" + html + "</body></html>";
+                    previewMarkdownUri = "http://mailmind.invalid/markdown/" + Guid.NewGuid().ToString("N");
+                    previewMarkdown.Source = new Uri(previewMarkdownUri);
                     previewMarkdown.Visibility = Visibility.Visible; PreviewMessage.Text = "";
                     return;
                 }
