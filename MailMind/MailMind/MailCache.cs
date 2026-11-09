@@ -119,6 +119,12 @@ ORDER BY m.date DESC,m.folder,m.uid DESC LIMIT $limit OFFSET $offset";
     public int HtmlVersion(string account,string folder,uint validity,uint uid) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT html_version FROM messages WHERE account=$a AND folder=$f AND validity=$v AND uid=$u"; Key(c,account,folder,validity,uid); return Convert.ToInt32(c.ExecuteScalar() ?? 0); }
     public void PutHtmlBody(string account,string folder,uint validity,uint uid,string html) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="UPDATE messages SET html_body=$b,html_version=2 WHERE account=$a AND folder=$f AND validity=$v AND uid=$u"; Key(c,account,folder,validity,uid); c.Parameters.AddWithValue("$b",html); c.ExecuteNonQuery(); }
     public void MarkSeen(string account,string folder,uint validity,uint uid) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="UPDATE messages SET is_seen=1 WHERE account=$a AND folder=$f AND validity=$v AND uid=$u"; Key(c,account,folder,validity,uid); c.ExecuteNonQuery(); }
+    public void Remove(MailItem item)
+    {
+        using var db=Open(); using var c=db.CreateCommand(); Key(c,item.Account,item.Folder,item.Validity,item.Uid);
+        c.CommandText="DELETE FROM messages WHERE account=$a AND folder=$f AND validity=$v AND uid=$u; DELETE FROM classifications WHERE account=$a AND folder=$f AND validity=$v AND uid=$u; DELETE FROM attachments WHERE account=$a AND folder=$f AND validity=$v AND uid=$u; DELETE FROM attachment_sets WHERE account=$a AND folder=$f AND validity=$v AND uid=$u; DELETE FROM attachment_flags WHERE account=$a AND folder=$f AND validity=$v AND uid=$u";
+        c.ExecuteNonQuery();
+    }
     public List<MailAttachment>? Attachments(MailItem item)
     {
         using var db = Open(); using var c = db.CreateCommand();

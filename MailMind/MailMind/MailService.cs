@@ -71,6 +71,7 @@ public record MailItem(uint Uid, string Sender, string Subject, string Date, str
 }
 public record MailBody(string Content, bool IsHtml);
 public record ReplyDraft(string To, string Cc, string Subject, string Text, string Sender, string Date, string? MessageId, string[] References);
+public record ForwardDraft(string Subject, string Text, string Sender, string Date, string To, string Cc);
 public record MailAttachment(string Name, string ContentType, byte[] Data)
 {
     public string SizeLabel => Data.Length < 1024 ? $"{Data.Length} B" : Data.Length < 1024 * 1024 ? $"{Data.Length / 1024.0:F1} KB" : $"{Data.Length / (1024.0 * 1024):F1} MB";
@@ -133,7 +134,6 @@ public sealed class MailService
         }
         return result;
     }
-
     public List<MailItem> SearchAgentMessages(string? folder, string query, string sender, string from, string to, int offset, int limit)
     {
         var selected = account ?? throw new InvalidOperationException(Strings.Get("More_5ae31f43f796"));
@@ -146,6 +146,7 @@ public sealed class MailService
         if (current != null) SetIdentity(current, item.Account, item.Folder, item.Validity);
         return current;
     }
+
     public void Load()
     {
         if (!File.Exists(ConfigPath)) return;
@@ -432,6 +433,48 @@ public sealed class MailService
         if (!subject.StartsWith("Re:", StringComparison.OrdinalIgnoreCase)) subject = "Re: " + subject;
         var text = original.TextBody ?? (original.HtmlBody != null ? HtmlTextExtractor.Extract(original.HtmlBody) : "");
         return new(to.ToString(), cc.ToString(), subject, text, original.From.ToString(), original.Date.ToLocalTime().ToString("g"), original.MessageId, original.References.ToArray());
+    }
+    public async Task<ForwardDraft> GetForwardDraftAsync(MailItem item, System.Threading.CancellationToken cancellationToken)
+    {
+        var selected = account;
+        if (selected == null || selected.Address != item.Account || string.IsNullOrEmpty(password)) throw new InvalidOperationException(Strings.Get("ForwardConnectError"));
+        using var client = new ImapClient();
+        await ConnectAsync(client, selected, password, cancellationToken);
+        var source = await client.GetFolderAsync(item.Folder, cancellationToken);
+        await source.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+        if (source.UidValidity != item.Validity) throw new InvalidOperationException(Strings.Get("MessageFolderRebuilt"));
+        var original = await source.GetMessageAsync(new UniqueId(item.Uid), cancellationToken);
+        var subject = original.Subject ?? "";
+        if (!subject.StartsWith("Fwd:", StringComparison.OrdinalIgnoreCase)) subject = "Fwd: " + subject;
+        return new(subject, original.TextBody ?? (original.HtmlBody != null ? HtmlTextExtractor.Extract(original.HtmlBody) : ""), original.From.ToString(), original.Date.ToLocalTime().ToString("g"), original.To.ToString(), original.Cc.ToString());
+    }
+    public async Task DeleteAsync(MailItem item, System.Threading.CancellationToken cancellationToken)
+    {
+        var selected = account;
+        if (selected == null || selected.Address != item.Account || string.IsNullOrEmpty(password)) throw new InvalidOperationException(Strings.Get("DeleteConnectError"));
+        using var client = new ImapClient();
+        await ConnectAsync(client, selected, password, cancellationToken);
+        var source = await client.GetFolderAsync(item.Folder, cancellationToken);
+        await source.OpenAsync(FolderAccess.ReadWrite, cancellationToken);
+        if (source.Access != FolderAccess.ReadWrite) throw new InvalidOperationException(Strings.Get("MessageFolderReadOnly"));
+        if (source.UidValidity != item.Validity) throw new InvalidOperationException(Strings.Get("MessageFolderRebuilt"));
+        var uid = new UniqueId(item.Uid);
+        var found = await source.FetchAsync(new[] { uid }, MessageSummaryItems.UniqueId, cancellationToken);
+        if (found.Count == 0) throw new InvalidOperationException(Strings.Get("MessageMovedOrDeleted"));
+        var trash = client.GetFolder(SpecialFolder.Trash);
+        if (trash != null && trash.FullName != source.FullName)
+        {
+            if ((client.Capabilities & (ImapCapabilities.Move | ImapCapabilities.UidPlus)) == 0) throw new InvalidOperationException(Strings.Get("MessageMoveUnsupported"));
+            await source.MoveToAsync(uid, trash, cancellationToken);
+        }
+        else
+        {
+            if ((client.Capabilities & ImapCapabilities.UidPlus) == 0) throw new InvalidOperationException(Strings.Get("MessageDeleteUnsupported"));
+            await source.AddFlagsAsync(uid, MessageFlags.Deleted, true, cancellationToken);
+            await source.ExpungeAsync(new[] { uid }, cancellationToken);
+        }
+        cache.Remove(item);
+        if (folderName == item.Folder && validity == item.Validity) ids.Remove(uid);
     }
     public async Task<(string To, string Cc)> GetRecipientsAsync(MailItem item)
     {

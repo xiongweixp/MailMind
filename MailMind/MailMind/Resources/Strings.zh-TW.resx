@@ -280,4 +280,18 @@
   <data name="Last_817cb148037c" xml:space="preserve"><value>草稿已更新，尚未傳送。</value></data>
   <data name="Last_0861906163bd" xml:space="preserve"><value>不支援此工具。</value></data>
   <data name="Last_96fdb6e1e506" xml:space="preserve"><value>offset 必須是 0 至 1000000 的整數。</value></data>
+  <data name="ForwardHeader" xml:space="preserve"><value>---------- 轉寄郵件 ----------&#10;寄件者：{0}&#10;時間：{1}&#10;收件者：{2}&#10;副本：{3}&#10;主旨：{4}&#10;&#10;{5}</value></data>
+  <data name="ForwardFailed" xml:space="preserve"><value>無法轉寄郵件</value></data>
+  <data name="ForwardConnectError" xml:space="preserve"><value>無法連線至郵件帳戶以取得轉寄資訊。</value></data>
+  <data name="DeleteConnectError" xml:space="preserve"><value>無法連線至郵件帳戶以刪除郵件。</value></data>
+  <data name="MessageFolderRebuilt" xml:space="preserve"><value>伺服器資料夾已重建，請重新開啟資料夾。</value></data>
+  <data name="MessageFolderReadOnly" xml:space="preserve"><value>伺服器不允許修改此資料夾。</value></data>
+  <data name="MessageMovedOrDeleted" xml:space="preserve"><value>郵件已在伺服器上刪除或移動，請重新整理資料夾。</value></data>
+  <data name="MessageMoveUnsupported" xml:space="preserve"><value>伺服器不支援安全地單獨移動此郵件。</value></data>
+  <data name="MessageDeleteUnsupported" xml:space="preserve"><value>伺服器不支援安全地單獨刪除此郵件。</value></data>
+  <data name="DeleteConfirmTitle" xml:space="preserve"><value>刪除郵件？</value></data>
+  <data name="DeleteConfirmMessage" xml:space="preserve"><value>郵件將從伺服器目前的資料夾中移除；若伺服器提供垃圾桶資料夾，郵件會移至該資料夾。</value></data>
+  <data name="DeleteAction" xml:space="preserve"><value>刪除</value></data>
+  <data name="DeleteCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="DeleteFailed" xml:space="preserve"><value>刪除郵件失敗</value></data>
 </root>

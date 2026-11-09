@@ -280,4 +280,18 @@
   <data name="Last_817cb148037c" xml:space="preserve"><value>The draft was updated but not sent.</value></data>
   <data name="Last_0861906163bd" xml:space="preserve"><value>This tool is not supported.</value></data>
   <data name="Last_96fdb6e1e506" xml:space="preserve"><value>offset must be an integer between 0 and 1000000.</value></data>
+  <data name="ForwardHeader" xml:space="preserve"><value>---------- Forwarded message ----------&#10;From: {0}&#10;Date: {1}&#10;To: {2}&#10;Cc: {3}&#10;Subject: {4}&#10;&#10;{5}</value></data>
+  <data name="ForwardFailed" xml:space="preserve"><value>Unable to forward message</value></data>
+  <data name="ForwardConnectError" xml:space="preserve"><value>Unable to connect to the email account to forward this message.</value></data>
+  <data name="DeleteConnectError" xml:space="preserve"><value>Unable to connect to the email account to delete this message.</value></data>
+  <data name="MessageFolderRebuilt" xml:space="preserve"><value>The server folder was recreated. Please reopen the folder.</value></data>
+  <data name="MessageFolderReadOnly" xml:space="preserve"><value>The server does not allow changes to this folder.</value></data>
+  <data name="MessageMovedOrDeleted" xml:space="preserve"><value>The message was deleted or moved on the server. Please refresh the folder.</value></data>
+  <data name="MessageMoveUnsupported" xml:space="preserve"><value>The server does not support safely moving this individual message.</value></data>
+  <data name="MessageDeleteUnsupported" xml:space="preserve"><value>The server does not support safely deleting this individual message.</value></data>
+  <data name="DeleteConfirmTitle" xml:space="preserve"><value>Delete message?</value></data>
+  <data name="DeleteConfirmMessage" xml:space="preserve"><value>The message will be removed from the current server folder. If the server provides a trash folder, it will be moved there.</value></data>
+  <data name="DeleteAction" xml:space="preserve"><value>Delete</value></data>
+  <data name="DeleteCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="DeleteFailed" xml:space="preserve"><value>Unable to delete message</value></data>
 </root>

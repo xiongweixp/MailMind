@@ -1217,6 +1217,53 @@ public sealed partial class MainWindow : Window
     }
     private async void Reply_Click(object sender, RoutedEventArgs e) => await StartReplyAsync(false);
     private async void ReplyAll_Click(object sender, RoutedEventArgs e) => await StartReplyAsync(true);
+    private async void Forward_Click(object sender, RoutedEventArgs e)
+    {
+        if (sending || preparingReply || MailList.SelectedItem is not MailItem item) return;
+        preparingReply = true;
+        try
+        {
+            var draft = await mail.GetForwardDraftAsync(item, windowLifetime.Token);
+            var attachments = await mail.GetAttachmentsAsync(item);
+            if (closing || !ReferenceEquals(MailList.SelectedItem, item) || ComposeWorkspace.Visibility == Visibility.Visible) return;
+            await OpenComposeAsync();
+            if (!composeReady || closing) return;
+            replyDraft = null;
+            ToBox.Text = CcBox.Text = ""; SubjectBox.Text = draft.Subject;
+            composeAttachments.Clear();
+            foreach (var attachment in attachments) composeAttachments.Add(attachment);
+            string header = string.Format(Strings.Get("ForwardHeader"), draft.Sender, draft.Date, draft.To, draft.Cc, item.Subject, draft.Text);
+            string html = "<p><br></p><div style='white-space:pre-wrap'>" + System.Net.WebUtility.HtmlEncode(header) + "</div>";
+            await BodyBox.CoreWebView2.ExecuteScriptAsync($"document.body.innerHTML = {System.Text.Json.JsonSerializer.Serialize(html)}; window.getSelection().collapse(document.body.firstChild, 0); document.body.focus();");
+        }
+        catch (OperationCanceledException) when (closing) { }
+        catch (Exception ex) { if (!closing) await ShowNotice(Strings.Get("ForwardFailed"), ex.Message); }
+        finally { preparingReply = false; }
+    }
+    private async void Delete_Click(object sender, RoutedEventArgs e)
+    {
+        if (loading || preparingReply || MailList.SelectedItem is not MailItem item) return;
+        var dialog = new ContentDialog { XamlRoot = ReadingToolbar.XamlRoot, Title = Strings.Get("DeleteConfirmTitle"), Content = Strings.Get("DeleteConfirmMessage"), PrimaryButtonText = Strings.Get("DeleteAction"), CloseButtonText = Strings.Get("DeleteCancel") };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || !ReferenceEquals(MailList.SelectedItem, item)) return;
+        preparingReply = true;
+        try
+        {
+            await mail.DeleteAsync(item, windowLifetime.Token);
+            if (closing) return;
+            aiResults.Remove(item);
+            messages.Remove(item);
+            if (ReferenceEquals(MailList.SelectedItem, item) || MailList.SelectedItem == null)
+            {
+                MailList.SelectedItem = null;
+                ReadingToolbar.Visibility = ReadingWorkspace.Visibility = PreviewWorkspace.Visibility = Visibility.Collapsed;
+                EmptyWorkspace.Visibility = Visibility.Visible;
+            }
+            if (folder == item.Folder) await OpenFolderAsync(folder);
+        }
+        catch (OperationCanceledException) when (closing) { }
+        catch (Exception ex) { if (!closing) await ShowNotice(Strings.Get("DeleteFailed"), ex.Message); }
+        finally { preparingReply = false; }
+    }
     private async Task StartReplyAsync(bool replyAll)
     {
         if (sending || preparingReply || MailList.SelectedItem is not MailItem item) return;

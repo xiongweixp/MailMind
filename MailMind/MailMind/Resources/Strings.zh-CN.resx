@@ -280,4 +280,18 @@
   <data name="Last_817cb148037c" xml:space="preserve"><value>草稿已更新，尚未发送。</value></data>
   <data name="Last_0861906163bd" xml:space="preserve"><value>不支持此工具。</value></data>
   <data name="Last_96fdb6e1e506" xml:space="preserve"><value>offset 必须是 0 至 1000000 的整数。</value></data>
+  <data name="ForwardHeader" xml:space="preserve"><value>---------- 转发邮件 ----------&#10;发件人：{0}&#10;时间：{1}&#10;收件人：{2}&#10;抄送：{3}&#10;主题：{4}&#10;&#10;{5}</value></data>
+  <data name="ForwardFailed" xml:space="preserve"><value>无法转发邮件</value></data>
+  <data name="ForwardConnectError" xml:space="preserve"><value>无法连接邮件账户获取转发信息。</value></data>
+  <data name="DeleteConnectError" xml:space="preserve"><value>无法连接邮件账户删除邮件。</value></data>
+  <data name="MessageFolderRebuilt" xml:space="preserve"><value>服务器目录已重建，请重新打开目录。</value></data>
+  <data name="MessageFolderReadOnly" xml:space="preserve"><value>服务器不允许修改此目录。</value></data>
+  <data name="MessageMovedOrDeleted" xml:space="preserve"><value>邮件已在服务器上删除或移动，请刷新目录。</value></data>
+  <data name="MessageMoveUnsupported" xml:space="preserve"><value>服务器不支持安全地单独移动此邮件。</value></data>
+  <data name="MessageDeleteUnsupported" xml:space="preserve"><value>服务器不支持安全地单独删除此邮件。</value></data>
+  <data name="DeleteConfirmTitle" xml:space="preserve"><value>删除邮件？</value></data>
+  <data name="DeleteConfirmMessage" xml:space="preserve"><value>邮件将从服务器当前目录删除；如果服务器提供已删除目录，邮件会移到该目录。</value></data>
+  <data name="DeleteAction" xml:space="preserve"><value>删除</value></data>
+  <data name="DeleteCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="DeleteFailed" xml:space="preserve"><value>删除邮件失败</value></data>
 </root>
