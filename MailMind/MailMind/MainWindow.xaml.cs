@@ -63,6 +63,12 @@ public sealed partial class MainWindow : Window
     private static extern uint GetDpiForWindow(nint hwnd);
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out NativePoint point);
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(nint hwnd);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(nint hwnd, int command);
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(nint hwnd);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern uint RegisterWindowMessage(string name);
     private static readonly uint TaskbarCreated = RegisterWindowMessage("TaskbarCreated");
@@ -195,7 +201,12 @@ public sealed partial class MainWindow : Window
         {
             int action = (int)lParam;
             if (action == 0x0202 || action == 0x0203 || action == 0x0405)
-                DispatcherQueue.TryEnqueue(() => { if (!closing) { AppWindow.Show(); Activate(); } });
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (closing) return;
+                    ShowWindow(hwnd, IsIconic(hwnd) ? 9 : 5);
+                    SetForegroundWindow(hwnd);
+                });
             else if (action == 0x0205 && trayIcon != null)
             {
                 int choice = trayIcon.ShowMenu();
@@ -1270,12 +1281,38 @@ public sealed partial class MainWindow : Window
             if (offset + length < body.Length && length > 0 && char.IsHighSurrogate(body[offset + length - 1]) && char.IsLowSurrogate(body[offset + length])) length--;
             return JsonSerializer.Serialize(new { success = true, id = idValue.GetString(), link = "mailmind:mail/" + idValue.GetString(), sender = LimitAgentText(item.Sender, 160), subject = LimitAgentText(item.Subject, 200), date = item.Date, offset, body = body.Substring(offset, length), next_offset = offset + length < body.Length ? (int?)(offset + length) : null }, MailAgent.ReadableJson);
         }
+        if (name == "list_contacts")
+        {
+            long afterId = 0;
+            if (args.ValueKind != JsonValueKind.Object || (args.TryGetProperty("after_id", out var after) && (after.ValueKind != JsonValueKind.Number || !after.TryGetInt64(out afterId) || afterId < 0))) throw new InvalidOperationException("after_id must be a non-negative integer.");
+            var (matches, nextAfterId) = ContactsView.ListContacts(afterId);
+            return JsonSerializer.Serialize(new { success = true, contacts = matches.Select(contact => new { id = contact.Id, name = contact.Name, email = contact.Email, phone = contact.Phone, company = contact.Company, department = contact.Department, title = contact.Title, notes = contact.Notes }), next_after_id = nextAfterId }, MailAgent.ReadableJson);
+        }
         if (name == "search_contacts")
         {
             if (!args.TryGetProperty("query", out var query) || query.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(query.GetString()))
                 throw new InvalidOperationException(Strings.Get("Last_de048b6e5b7f"));
             var (matches, truncated) = ContactsView.SearchContacts(query.GetString()!);
-            return JsonSerializer.Serialize(new { success = true, contacts = System.Linq.Enumerable.Select(matches, contact => new { name = contact.Name, email = contact.Email, company = contact.Company, department = contact.Department, title = contact.Title }), truncated }, MailAgent.ReadableJson);
+            return JsonSerializer.Serialize(new { success = true, contacts = System.Linq.Enumerable.Select(matches, contact => new { id = contact.Id, name = contact.Name, email = contact.Email, phone = contact.Phone, company = contact.Company, department = contact.Department, title = contact.Title, notes = contact.Notes }), truncated }, MailAgent.ReadableJson);
+        }
+        if (name == "create_contact" || name == "update_contact" || name == "delete_contact")
+        {
+            if (args.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("Contact arguments must be an object.");
+            long? id = null;
+            if (name != "create_contact")
+            {
+                if (!args.TryGetProperty("id", out var idValue) || !idValue.TryGetInt64(out long contactId) || contactId <= 0) throw new InvalidOperationException("A valid contact id is required.");
+                id = contactId;
+            }
+            if (name == "delete_contact") { ContactsView.DeleteContact(id!.Value); return JsonSerializer.Serialize(new { success = true, id }); }
+            string? Field(string key)
+            {
+                if (!args.TryGetProperty(key, out var value)) return null;
+                if (value.ValueKind != JsonValueKind.String) throw new InvalidOperationException($"{key} must be a string.");
+                return value.GetString();
+            }
+            var contact = ContactsView.SaveContact(id, Field("name"), Field("email"), Field("phone"), Field("company"), Field("department"), Field("title"), Field("notes"));
+            return JsonSerializer.Serialize(new { success = true, contact }, MailAgent.ReadableJson);
         }
         if (name == "compose_email")
         {

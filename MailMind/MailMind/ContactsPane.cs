@@ -109,6 +109,46 @@ public sealed class ContactsPane : Grid
         Refresh();
     }
     private SqliteConnection Open() { var db = new SqliteConnection(connection); db.Open(); return db; }
+    public Contact SaveContact(long? id, string? name, string? email, string? phone, string? company, string? department, string? title, string? notes)
+    {
+        using var db = Open();
+        Contact? old = null;
+        if (id.HasValue)
+        {
+            using var read = db.CreateCommand(); read.CommandText = "SELECT id,name,email,phone,company,department,title,notes FROM contacts WHERE id=$id"; read.Parameters.AddWithValue("$id", id.Value);
+            using var row = read.ExecuteReader();
+            if (!row.Read()) throw new InvalidOperationException("Contact not found.");
+            old = new Contact(row.GetInt64(0), row.GetString(1), row.GetString(2), row.GetString(3), row.GetString(4), row.GetString(5), row.GetString(6), row.GetString(7));
+        }
+        var values = new[] { name ?? old?.Name ?? "", email ?? old?.Email ?? "", phone ?? old?.Phone ?? "", company ?? old?.Company ?? "", department ?? old?.Department ?? "", title ?? old?.Title ?? "", notes ?? old?.Notes ?? "" };
+        for (int i = 0; i < values.Length; i++) values[i] = values[i].Trim();
+        if (string.IsNullOrWhiteSpace(values[0]) || !MimeKit.MailboxAddress.TryParse(values[1], out var parsed) || parsed.Address != values[1]) throw new InvalidOperationException(Strings.Get("Contact_3b303cde8823"));
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = id.HasValue ? "UPDATE contacts SET name=$n,email=$e,phone=$p,company=$c,department=$d,title=$t,notes=$o WHERE id=$id" : "INSERT INTO contacts(name,email,phone,company,department,title,notes) VALUES($n,$e,$p,$c,$d,$t,$o)";
+        string[] keys = { "$n", "$e", "$p", "$c", "$d", "$t", "$o" }; for (int i = 0; i < keys.Length; i++) cmd.Parameters.AddWithValue(keys[i], values[i]);
+        if (id.HasValue) cmd.Parameters.AddWithValue("$id", id.Value);
+        try { cmd.ExecuteNonQuery(); } catch (SqliteException ex) when (ex.SqliteErrorCode == 19) { throw new InvalidOperationException(Strings.Get("Contact_d2b8c0e173d6"), ex); }
+        if (!id.HasValue) { using var last = db.CreateCommand(); last.CommandText = "SELECT last_insert_rowid()"; id = (long)last.ExecuteScalar()!; }
+        Refresh();
+        return new Contact(id.Value, values[0], values[1], values[2], values[3], values[4], values[5], values[6]);
+    }
+    public void DeleteContact(long id)
+    {
+        using var db = Open(); using var cmd = db.CreateCommand(); cmd.CommandText = "DELETE FROM contacts WHERE id=$id"; cmd.Parameters.AddWithValue("$id", id);
+        if (cmd.ExecuteNonQuery() == 0) throw new InvalidOperationException("Contact not found.");
+        Refresh();
+    }
+    public (List<Contact> Matches, long? NextAfterId) ListContacts(long afterId)
+    {
+        using var db = Open(); using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT id,name,email,phone,company,department,title,notes FROM contacts WHERE id > $id ORDER BY id LIMIT 51";
+        cmd.Parameters.AddWithValue("$id", afterId);
+        using var rows = cmd.ExecuteReader(); var matches = new List<Contact>();
+        while (rows.Read()) matches.Add(new Contact(rows.GetInt64(0), rows.GetString(1), rows.GetString(2), rows.GetString(3), rows.GetString(4), rows.GetString(5), rows.GetString(6), rows.GetString(7)));
+        bool more = matches.Count > 50;
+        if (more) matches.RemoveAt(50);
+        return (matches, more ? matches[^1].Id : null);
+    }
     public (List<Contact> Matches, bool Truncated) SearchContacts(string query, int limit = 20)
     {
         query = query.Trim();
