@@ -76,6 +76,7 @@ public record MailAttachment(string Name, string ContentType, byte[] Data)
 {
     public string SizeLabel => Data.Length < 1024 ? $"{Data.Length} B" : Data.Length < 1024 * 1024 ? $"{Data.Length / 1024.0:F1} KB" : $"{Data.Length / (1024.0 * 1024):F1} MB";
     public bool IsImage => Path.GetExtension(Name).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp";
+    public bool IsText => Path.GetExtension(Name).ToLowerInvariant() is ".txt" or ".md" or ".markdown";
     private string Kind => Path.GetExtension(Name).ToLowerInvariant() switch
     {
         ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp" or ".heic" or ".svg" or ".tif" or ".tiff" => "image",
@@ -215,7 +216,7 @@ public sealed class MailService
         catch { client.Dispose(); throw; }
     }
     public List<MailFolderInfo> CachedFolders() => account == null ? new() : cache.Folders(account.Address);
-    public async Task SyncFolderAsync(string path, System.Threading.CancellationToken token)
+    public async Task<bool> SyncFolderAsync(string path, System.Threading.CancellationToken token, Action<int, int>? progress = null)
     {
         var selected = account ?? throw new InvalidOperationException("No mail account configured.");
         var secret = password ?? throw new InvalidOperationException("No mail password configured.");
@@ -231,6 +232,8 @@ public sealed class MailService
             if (found.Count < remote.Count) throw new InvalidDataException("The server did not return all message IDs.");
         }
         uint currentValidity = remote.UidValidity;
+        if (cache.Validity(selected.Address, path) != currentValidity)
+            cache.SetValidity(selected.Address, path, currentValidity);
         var complete = cache.CompleteUids(selected.Address, path, currentValidity);
         var existing = found.Where(id => complete.Contains(id.Id)).ToList();
         foreach (var batch in existing.Chunk(500))
@@ -239,7 +242,9 @@ public sealed class MailService
             if (flags.Count != batch.Length) throw new InvalidDataException("The server message list changed during synchronization.");
             cache.UpdateSeen(selected.Address, path, currentValidity, flags.Where(s => s.Flags.HasValue).Select(s => (s.UniqueId.Id, (s.Flags!.Value & MessageFlags.Seen) != 0)));
         }
-        foreach (var batch in found.Where(id => !complete.Contains(id.Id)).Chunk(50))
+        var missing = found.Where(id => !complete.Contains(id.Id)).OrderByDescending(id => id.Id).ToList();
+        int completed = found.Count - missing.Count;
+        foreach (var batch in missing.Take(10).Chunk(10))
         {
             token.ThrowIfCancellationRequested();
             IList<IMessageSummary> summaries;
@@ -248,6 +253,7 @@ public sealed class MailService
             if (summaries.Count != batch.Length) throw new InvalidDataException("The server message list changed during synchronization.");
             foreach (var summary in summaries)
             {
+                progress?.Invoke(++completed, found.Count);
                 var uid = summary.UniqueId.Id;
                 var previous = cache.Get(selected.Address, path, currentValidity, uid);
                 var item = new MailItem(uid, summary.Envelope?.From.ToString() ?? "", summary.Envelope?.Subject ?? "", summary.Envelope?.Date?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "", summary.PreviewText ?? previous?.Preview ?? "", summary.Flags.HasValue ? (summary.Flags.Value & MessageFlags.Seen) != 0 : null);
@@ -275,7 +281,7 @@ public sealed class MailService
             }
         }
         token.ThrowIfCancellationRequested();
-        if (!ReferenceEquals(account, selected)) return;
+        if (!ReferenceEquals(account, selected)) return false;
         var verified = await remote.SearchAsync(SearchQuery.All, token);
         if (verified.Count < remote.Count)
         {
@@ -283,8 +289,9 @@ public sealed class MailService
             verified = all.Select(s => s.UniqueId).Where(id => id.IsValid).ToList();
         }
         if (verified.Count != remote.Count || !verified.OrderBy(id => id.Id).SequenceEqual(found.OrderBy(id => id.Id)))
-            throw new InvalidDataException("The server message list changed during synchronization.");
+            return true;
         cache.RemoveMissing(selected.Address, path, currentValidity, found.Select(id => id.Id).ToArray());
+        return missing.Count > 10;
     }
     public async Task<IReadOnlyList<MailFolderInfo>> GetFoldersAsync()
     {

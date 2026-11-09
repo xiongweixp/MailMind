@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <Content Include="Assets\MailMind.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\TrayNormal.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\TrayImportant.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\MailMind.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\MailMindAI-A-224.png" CopyToOutputDirectory="PreserveNewest" />
     <Manifest Include="$(ApplicationManifest)" />
@@ -23,6 +25,7 @@
 
   <ItemGroup>
     <PackageReference Include="MailKit" Version="4.14.1" />
+    <PackageReference Include="Markdig" Version="0.41.3" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.20" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.4" />

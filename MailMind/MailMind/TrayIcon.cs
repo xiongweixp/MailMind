@@ -30,8 +30,22 @@ internal sealed class TrayIcon : IDisposable
     private NotifyData data;
     public TrayIcon(nint window)
     {
-        data = new NotifyData { Size = (uint)Marshal.SizeOf<NotifyData>(), Window = window, Id = 1, Flags = 7, Callback = CallbackMessage, Icon = LoadImage(0, System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "MailMind.ico"), 1, 0, 0, 0x10), Tip = "MailMind", Info = "", InfoTitle = "" };
+        data = new NotifyData { Size = (uint)Marshal.SizeOf<NotifyData>(), Window = window, Id = 1, Flags = 7, Callback = CallbackMessage, Icon = LoadImage(0, System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "TrayNormal.ico"), 1, 0, 0, 0x10), Tip = "MailMind", Info = "", InfoTitle = "" };
         if (data.Icon == 0 || !Shell_NotifyIcon(0, ref data)) { if (data.Icon != 0) DestroyIcon(data.Icon); throw new InvalidOperationException("Could not create the system tray icon."); }
+    }
+    public void SetUnread(bool unread)
+    {
+        var icon = LoadImage(0, System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", unread ? "TrayImportant.ico" : "TrayNormal.ico"), 1, 0, 0, 0x10);
+        if (icon == 0) return;
+        var old = data.Icon; data.Icon = icon; data.Flags = 2;
+        if (Shell_NotifyIcon(1, ref data)) DestroyIcon(old);
+        else { data.Icon = old; DestroyIcon(icon); }
+    }
+    public void Notify(string title, string summary)
+    {
+        data.Flags = 0x10; data.InfoTitle = title.Length > 63 ? title[..63] : title;
+        data.Info = summary.Length > 255 ? summary[..255] : summary; data.InfoFlags = 1;
+        Shell_NotifyIcon(1, ref data);
     }
     public int ShowMenu()
     {

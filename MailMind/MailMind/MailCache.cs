@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS attachments (account TEXT NOT NULL, folder TEXT NOT N
     public void SaveFolders(string account, IReadOnlyList<MailFolderInfo> folders)
     {
         using var db = Open(); using var tx = db.BeginTransaction();
-        using var paths = db.CreateCommand(); paths.Transaction = tx; paths.CommandText = "CREATE TEMP TABLE sync_folders (path TEXT PRIMARY KEY)"; paths.ExecuteNonQuery();
+        using var paths = db.CreateCommand(); paths.Transaction = tx; paths.CommandText = "CREATE TEMP TABLE IF NOT EXISTS sync_folders (path TEXT PRIMARY KEY); DELETE FROM sync_folders"; paths.ExecuteNonQuery();
         paths.CommandText = "INSERT INTO sync_folders VALUES ($p)"; var pathParameter = paths.Parameters.Add("$p", SqliteType.Text);
         foreach (var folder in folders) { pathParameter.Value = folder.Path; paths.ExecuteNonQuery(); }
         using var del = db.CreateCommand(); del.Transaction = tx; del.CommandText = "DELETE FROM folders WHERE account=$a AND path NOT IN (SELECT path FROM sync_folders)"; del.Parameters.AddWithValue("$a", account); del.ExecuteNonQuery();
@@ -82,7 +82,7 @@ ORDER BY m.date DESC,m.folder,m.uid DESC LIMIT $limit OFFSET $offset";
     {
         using var db = Open(); using var tx = db.BeginTransaction();
         using var c = db.CreateCommand(); c.Transaction = tx;
-        c.CommandText = "CREATE TEMP TABLE sync_uids (uid INTEGER PRIMARY KEY)"; c.ExecuteNonQuery();
+        c.CommandText = "CREATE TEMP TABLE IF NOT EXISTS sync_uids (uid INTEGER PRIMARY KEY); DELETE FROM sync_uids"; c.ExecuteNonQuery();
         c.CommandText = "INSERT INTO sync_uids VALUES ($uid)"; var parameter = c.Parameters.Add("$uid", SqliteType.Integer);
         foreach (var uid in uids) { parameter.Value = uid; c.ExecuteNonQuery(); }
         c.Parameters.Clear(); c.Parameters.AddWithValue("$a", account); c.Parameters.AddWithValue("$f", folder); c.Parameters.AddWithValue("$v", validity);

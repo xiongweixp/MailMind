@@ -240,7 +240,11 @@
   <data name="Fmt_b3c9b1921f64" xml:space="preserve"><value>附件（{0}）</value></data>
   <data name="ResizeColumns" xml:space="preserve"><value>拖曳以調整欄位寬度</value></data>
   <data name="CacheCount" xml:space="preserve"><value>本機快取：{0} 封</value></data>
+  <data name="DateRangeChooseStart" xml:space="preserve"><value>請選擇開始日期</value></data>
+  <data name="DateRangeChooseEnd" xml:space="preserve"><value>開始：{0:yyyy-MM-dd} · 請選擇結束日期</value></data>
+  <data name="DateRangeSelected" xml:space="preserve"><value>{0:yyyy-MM-dd} 至 {1:yyyy-MM-dd} · 再次點擊重新選擇</value></data>
   <data name="Fmt_4f922a65014e" xml:space="preserve"><value>本機快取：{0} 封 · 正在同步…</value></data>
+  <data name="SyncProgress" xml:space="preserve"><value>本機快取：{0} 封 · 正在同步（第 {1} / {2} 封）…</value></data>
   <data name="Fmt_682976292efe" xml:space="preserve"><value>離線快取：已載入 {0} / {1} 封。連線失敗：{2}</value></data>
   <data name="Fmt_51affa73cdfd" xml:space="preserve"><value>已載入 {0} / {1} 封</value></data>
   <data name="Fmt_512c06f73ef0" xml:space="preserve"><value>AI 搜尋中 · 本機快取 0/{0} · 符合 0</value></data>
