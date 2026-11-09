@@ -95,6 +95,25 @@ ORDER BY m.date DESC,m.folder,m.uid DESC LIMIT $limit OFFSET $offset";
         tx.Commit();
     }
     public List<uint> Uids(string account,string folder,uint validity) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT uid FROM messages WHERE account=$a AND folder=$f AND validity=$v ORDER BY uid DESC"; c.Parameters.AddWithValue("$a",account); c.Parameters.AddWithValue("$f",folder); c.Parameters.AddWithValue("$v",validity); using var r=c.ExecuteReader(); var list=new List<uint>(); while(r.Read()) list.Add((uint)r.GetInt64(0)); return list; }
+    public HashSet<uint> CompleteUids(string account, string folder, uint validity)
+    {
+        using var db = Open(); using var c = db.CreateCommand();
+        c.CommandText = @"SELECT m.uid FROM messages m JOIN attachment_sets s ON s.account=m.account AND s.folder=m.folder AND s.validity=m.validity AND s.uid=m.uid
+WHERE m.account=$a AND m.folder=$f AND m.validity=$v AND (m.html_version>=2 OR m.body IS NOT NULL)";
+        c.Parameters.AddWithValue("$a", account); c.Parameters.AddWithValue("$f", folder); c.Parameters.AddWithValue("$v", validity);
+        using var r = c.ExecuteReader(); var result = new HashSet<uint>();
+        while (r.Read()) result.Add((uint)r.GetInt64(0));
+        return result;
+    }
+    public void UpdateSeen(string account, string folder, uint validity, IEnumerable<(uint Uid, bool Seen)> flags)
+    {
+        using var db = Open(); using var tx = db.BeginTransaction(); using var c = db.CreateCommand(); c.Transaction = tx;
+        c.CommandText = "UPDATE messages SET is_seen=$seen WHERE account=$a AND folder=$f AND validity=$v AND uid=$u AND is_seen IS NOT $seen";
+        c.Parameters.AddWithValue("$a", account); c.Parameters.AddWithValue("$f", folder); c.Parameters.AddWithValue("$v", validity);
+        var uid = c.Parameters.Add("$u", SqliteType.Integer); var seen = c.Parameters.Add("$seen", SqliteType.Integer);
+        foreach (var flag in flags) { uid.Value = flag.Uid; seen.Value = flag.Seen ? 1 : 0; c.ExecuteNonQuery(); }
+        tx.Commit();
+    }
     public MailItem? Get(string account,string folder,uint validity,uint uid) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT sender,subject,date,preview,is_seen,(SELECT has_attachments FROM attachment_flags f WHERE f.account=messages.account AND f.folder=messages.folder AND f.validity=messages.validity AND f.uid=messages.uid) FROM messages WHERE account=$a AND folder=$f AND validity=$v AND uid=$u"; Key(c,account,folder,validity,uid); using var r=c.ExecuteReader(); return r.Read()?new MailItem(uid,r.GetString(0),r.GetString(1),r.GetString(2),r.GetString(3),r.IsDBNull(4) ? null : r.GetInt32(4) != 0) { HasAttachments = r.IsDBNull(5) ? null : r.GetInt32(5) != 0 }:null; }
     public void PutAttachmentFlag(MailItem item) { if (!item.HasAttachments.HasValue) return; using var db=Open(); using var c=db.CreateCommand(); Key(c,item.Account,item.Folder,item.Validity,item.Uid); c.CommandText="INSERT OR REPLACE INTO attachment_flags VALUES($a,$f,$v,$u,$h)"; c.Parameters.AddWithValue("$h",item.HasAttachments.Value ? 1 : 0); c.ExecuteNonQuery(); }
     public void Put(string account,string folder,uint validity,MailItem item) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="INSERT INTO messages(account,folder,validity,uid,sender,subject,date,preview,is_seen) VALUES($a,$f,$v,$u,$s,$t,$d,$p,$seen) ON CONFLICT(account,folder,validity,uid) DO UPDATE SET sender=$s,subject=$t,date=$d,preview=$p,is_seen=$seen"; Key(c,account,folder,validity,item.Uid); c.Parameters.AddWithValue("$s",item.Sender); c.Parameters.AddWithValue("$t",item.Subject); c.Parameters.AddWithValue("$d",item.Date); c.Parameters.AddWithValue("$p",item.Preview); c.Parameters.AddWithValue("$seen",item.IsSeen.HasValue ? (object)(item.IsSeen.Value ? 1 : 0) : DBNull.Value); c.ExecuteNonQuery(); }

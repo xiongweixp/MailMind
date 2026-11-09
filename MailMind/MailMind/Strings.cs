@@ -12,7 +12,13 @@ internal static class Strings
     [DllImport("kernel32.dll")]
     private static extern ushort GetUserDefaultUILanguage();
 
-    private static readonly CultureInfo Language = SelectLanguage(CultureInfo.GetCultureInfo(GetUserDefaultUILanguage()));
+    private static readonly CultureInfo Language = SelectConfiguredLanguage();
+
+    private static CultureInfo SelectConfiguredLanguage()
+    {
+        var configured = GeneralSettings.Load().Language;
+        return configured is "zh-CN" or "zh-TW" or "en-US" ? CultureInfo.GetCultureInfo(configured) : SelectLanguage(CultureInfo.GetCultureInfo(GetUserDefaultUILanguage()));
+    }
 
     public static string LanguageTag => Language.Name;
 

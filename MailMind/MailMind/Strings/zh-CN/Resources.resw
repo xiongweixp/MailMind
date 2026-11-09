@@ -12,7 +12,7 @@
   <data name="L90406df61d59.Text" xml:space="preserve"><value>尚未添加邮箱</value></data>
   <data name="Ld1e43a452306.Text" xml:space="preserve"><value>尚未连接邮箱</value></data>
   <data name="L66318d2d0d82.Text" xml:space="preserve"><value>通讯录</value></data>
-  <data name="L725cc71ba3bb.Text" xml:space="preserve"><value>配置</value></data>
+  <data name="L725cc71ba3bb.Text" xml:space="preserve"><value>设置</value></data>
   <data name="Lae7b06edb77b.PlaceholderText" xml:space="preserve"><value>搜索邮件</value></data>
   <data name="Lae7b06edb77b.AutomationProperties.Name" xml:space="preserve"><value>搜索邮件</value></data>
   <data name="Lb94351cb1efa.ToolTipService.ToolTip" xml:space="preserve"><value>按日期筛选已加载邮件</value></data>

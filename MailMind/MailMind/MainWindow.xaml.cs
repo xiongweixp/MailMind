@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Input;
 using System;
 using System.Collections.ObjectModel;
@@ -31,11 +32,14 @@ public sealed partial class MainWindow : Window
     private bool aiSearchShowing;
     private bool closing;
     private bool closeReady;
+    private bool exitRequested;
+    private TrayIcon? trayIcon;
+    private GeneralSettings generalSettings = GeneralSettings.Load();
     private static readonly string LayoutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailMind", "layout.json");
     private double expandedAiWidth = 320, dragStartX, dragFirstWidth, dragSecondWidth;
     private int activeSplitter = -1;
     private uint dragPointerId;
-    private record ColumnWidths(double Sidebar, double Mail, double Ai);
+    private record ColumnWidths(double Sidebar, double Mail, double Ai, double Contacts = 340);
     private delegate nint WindowSubclassProc(nint hwnd, uint message, nuint wParam, nint lParam, nuint subclassId, nuint referenceData);
     private WindowSubclassProc? windowSubclass;
     [StructLayout(LayoutKind.Sequential)]
@@ -54,6 +58,9 @@ public sealed partial class MainWindow : Window
     private static extern uint GetDpiForWindow(nint hwnd);
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out NativePoint point);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint RegisterWindowMessage(string name);
+    private static readonly uint TaskbarCreated = RegisterWindowMessage("TaskbarCreated");
     private uint? toolbarDragPointer;
     private NativePoint toolbarDragStart;
     private Windows.Graphics.PointInt32 toolbarWindowStart;
@@ -63,6 +70,8 @@ public sealed partial class MainWindow : Window
     private readonly CollectionViewSource groupedMessages = new() { IsSourceGrouped = true };
     private bool aiVisible = true, loading;
     private bool checkingForMail, folderInitialized;
+    private int activeSyncs;
+    private Storyboard? refreshAnimation;
     private readonly DispatcherTimer mailSyncTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private int total, offset;
     private string folder = "收件箱";
@@ -79,6 +88,8 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ToBox.Search = query => ContactsView.SearchRecipients(query);
+        CcBox.Search = query => ContactsView.SearchRecipients(query);
         ContactsView.ComposeRequested += async address => { ContactsView.Visibility = Visibility.Collapsed; UpdateFolderSelection(folder); await OpenComposeAsync(); ToBox.Text = address; };
         ContactsView.MailRequested += async message => await OpenContactMailAsync(message);
         ComposeAttachmentList.ItemsSource = composeAttachments;
@@ -90,6 +101,7 @@ public sealed partial class MainWindow : Window
         mailSyncTimer.Tick += async (_, _) => await CheckForNewMailAsync();
         mailSyncTimer.Start();
         LoadColumnWidths();
+        ContactsView.ContactListWidthChanged += SaveColumnWidths;
         windowSubclass = WindowMessage;
         if (!SetWindowSubclass(WinRT.Interop.WindowNative.GetWindowHandle(this), windowSubclass, 1, 0))
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
@@ -159,6 +171,25 @@ public sealed partial class MainWindow : Window
     private nint WindowMessage(nint hwnd, uint message, nuint wParam, nint lParam, nuint subclassId, nuint referenceData)
     {
         const uint getMinMaxInfo = 0x0024, ncDestroy = 0x0082;
+        if (message == TaskbarCreated && trayIcon != null)
+        {
+            trayIcon.Dispose(); trayIcon = null;
+            try { trayIcon = new TrayIcon(hwnd); }
+            catch (Exception) { AppWindow.Show(); Activate(); }
+            return 0;
+        }
+        if (message == TrayIcon.CallbackMessage)
+        {
+            int action = (int)lParam;
+            if (action == 0x0202 || action == 0x0203) { AppWindow.Show(); Activate(); }
+            else if (action == 0x0205 && trayIcon != null)
+            {
+                int choice = trayIcon.ShowMenu();
+                if (choice == 1) { AppWindow.Show(); Activate(); }
+                else if (choice == 2) { exitRequested = true; Close(); }
+            }
+            return 0;
+        }
         if (message == getMinMaxInfo)
         {
             var info = Marshal.PtrToStructure<MinMaxInfo>(lParam);
@@ -177,7 +208,13 @@ public sealed partial class MainWindow : Window
         if (closeReady) return;
         args.Cancel = true;
         if (closing) return;
+        if (generalSettings.CloseToTray && !exitRequested)
+        {
+            try { trayIcon ??= new TrayIcon(WinRT.Interop.WindowNative.GetWindowHandle(this)); AppWindow.Hide(); return; }
+            catch (Exception) { /* If the tray is unavailable, close normally. */ }
+        }
         closing = true;
+        trayIcon?.Dispose(); trayIcon = null;
         mailSyncTimer.Stop();
         searchCancellation?.Cancel();
         windowLifetime.Cancel();
@@ -233,7 +270,7 @@ public sealed partial class MainWindow : Window
     private async void Contacts_Click(object sender, RoutedEventArgs e)
     {
         if (ComposeWorkspace.Visibility == Visibility.Visible) { await ShowNotice(Strings.Get("Ui_ef40431c5873"), Strings.Get("Ui_9b64d64a01dd")); return; }
-        ContactsView.Visibility = Visibility.Visible; ContactsView.Refresh(); UpdateFolderSelection(folder);
+        SettingsView.Visibility = Visibility.Collapsed; ContactsView.Visibility = Visibility.Visible; ContactsView.Refresh(); UpdateFolderSelection(folder);
     }
     private async Task OpenContactMailAsync(ContactsPane.RecentMail message)
     {
@@ -273,12 +310,13 @@ public sealed partial class MainWindow : Window
         bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
         foreach (var (path, button) in folderButtons)
         {
-            bool selected = ContactsView.Visibility != Visibility.Visible && path == name;
+            bool selected = ContactsView.Visibility != Visibility.Visible && SettingsView.Visibility != Visibility.Visible && path == name;
             button.Background = new SolidColorBrush(selected ? (dark ? Windows.UI.Color.FromArgb(255, 43, 68, 98) : Windows.UI.Color.FromArgb(255, 225, 235, 252)) : Microsoft.UI.Colors.Transparent);
             button.Foreground = new SolidColorBrush(selected ? (dark ? Windows.UI.Color.FromArgb(255, 173, 207, 255) : Windows.UI.Color.FromArgb(255, 27, 82, 181)) : (dark ? Windows.UI.Color.FromArgb(255, 242, 243, 245) : Windows.UI.Color.FromArgb(255, 23, 35, 58)));
         }
         bool contactsSelected = ContactsView.Visibility == Visibility.Visible;
         ContactsButton.Background = new SolidColorBrush(contactsSelected ? (dark ? Windows.UI.Color.FromArgb(255, 43, 68, 98) : Windows.UI.Color.FromArgb(255, 225, 235, 252)) : Microsoft.UI.Colors.Transparent);
+        SettingsButton.Background = new SolidColorBrush(SettingsView.Visibility == Visibility.Visible ? (dark ? Windows.UI.Color.FromArgb(255, 43, 68, 98) : Windows.UI.Color.FromArgb(255, 225, 235, 252)) : Microsoft.UI.Colors.Transparent);
     }
     private void UpdateThemeColors()
     {
@@ -339,6 +377,9 @@ public sealed partial class MainWindow : Window
     };
     private async Task LoadFoldersAsync()
     {
+        StartSyncAnimation();
+        try
+        {
         var cached = mail.CachedFolders();
         if (cached.Count > 0)
         {
@@ -361,11 +402,33 @@ public sealed partial class MainWindow : Window
         {
             if (!closing) ListStatus.Text = cached.Count > 0 ? Strings.Get("Ui_01cfb10ae247") + ex.Message : Strings.Get("Ui_77b89d0d2434") + ex.Message;
         }
+        }
+        finally { StopSyncAnimation(); }
+    }
+    private void StartSyncAnimation()
+    {
+        if (activeSyncs++ != 0) return;
+        var rotation = new DoubleAnimation { From = 0, To = -360, Duration = new Duration(TimeSpan.FromSeconds(1)), RepeatBehavior = RepeatBehavior.Forever };
+        Storyboard.SetTarget(rotation, RefreshRotation);
+        Storyboard.SetTargetProperty(rotation, "Angle");
+        refreshAnimation = new Storyboard();
+        refreshAnimation.Children.Add(rotation);
+        refreshAnimation.Begin();
+    }
+    private void StopSyncAnimation()
+    {
+        if (--activeSyncs != 0) return;
+        refreshAnimation?.Stop();
+        refreshAnimation = null;
     }
     private async Task CheckForNewMailAsync()
     {
         if (closing || checkingForMail || mail.Account == null) return;
         checkingForMail = true;
+        mailSyncTimer.Stop();
+        StartSyncAnimation();
+        if (ListStatus.Text == string.Format(Strings.Get("CacheCount"), total))
+            ListStatus.Text = string.Format(Strings.Get("Fmt_4f922a65014e"), total);
         var account = mail.Account;
         try
         {
@@ -382,11 +445,18 @@ public sealed partial class MainWindow : Window
                 catch (Exception ex) { if (!closing && folder == entry.Path) ListStatus.Text = Strings.Get("Ui_67c7dec77218") + ex.Message; }
             }
         }
-        finally { checkingForMail = false; }
+        finally
+        {
+            checkingForMail = false;
+            if (!closing && ListStatus.Text == string.Format(Strings.Get("Fmt_4f922a65014e"), total))
+                ListStatus.Text = string.Format(Strings.Get("CacheCount"), total);
+            StopSyncAnimation();
+            if (!closing) mailSyncTimer.Start();
+        }
     }
     private Task OpenFolderAsync(string name)
     {
-        ContactsView.Visibility = Visibility.Collapsed;
+        ContactsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Collapsed;
         searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear();
         AiSearchStatusPanel.Visibility = Visibility.Collapsed;
         bool changed = folder != name || !folderInitialized;
@@ -423,7 +493,7 @@ public sealed partial class MainWindow : Window
         }
         total = cached.Count; offset = visible.Count;
         ListEmptyText.Visibility = total == 0 ? Visibility.Visible : Visibility.Collapsed;
-        ListStatus.Text = string.Format(Strings.Get("Fmt_4f922a65014e"), total);
+        ListStatus.Text = string.Format(Strings.Get(checkingForMail ? "Fmt_4f922a65014e" : "CacheCount"), total);
     }
     private async Task LoadPageAsync()
     {
@@ -812,7 +882,7 @@ public sealed partial class MainWindow : Window
     private int sendStatusVersion;
     private async void Compose_Click(object sender, RoutedEventArgs e)
     {
-        ContactsView.Visibility = Visibility.Collapsed;
+        ContactsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Collapsed;
         UpdateFolderSelection(folder);
         if (!sending && !preparingReply) await OpenComposeAsync();
     }
@@ -1454,6 +1524,8 @@ public sealed partial class MainWindow : Window
         }
     }    private async void Settings_Click(object sender, RoutedEventArgs e)
     {
+        if (ComposeWorkspace.Visibility == Visibility.Visible) { await ShowNotice(Strings.Get("Ui_ef40431c5873"), Strings.Get("Ui_9b64d64a01dd")); return; }
+        ContactsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Visible; UpdateFolderSelection(folder);
         var a = mail.Account;
         var address = new TextBox { Header = Strings.Get("Ui_b13ddae6cbad"), Text = a?.Address ?? "", PlaceholderText = "name@example.com" };
         var user = new TextBox { Header = Strings.Get("Ui_e9fe4dd6cc42"), Text = a?.UserName ?? "", PlaceholderText = Strings.Get("Ui_dabfb7535cc5") };
@@ -1516,17 +1588,41 @@ public sealed partial class MainWindow : Window
         var enabled = new CheckBox { Content = Strings.Get("Ui_cc02bd1d65c6"), IsChecked = ai.Enabled };
         var relabel = new Button { Content = Strings.Get("Ui_1c623b0d00bf") };
         var aiPanel = new StackPanel { Spacing = 10, Children = { new TextBlock { Text = Strings.Get("Ui_a9d73061c250"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, new TextBlock { Text = Strings.Get("Ui_da5402b2a1dc"), TextWrapping = TextWrapping.Wrap }, engine, aiPort, refreshModels, modelStatus, model, chatModel, profile, enabled, relabel } };
-        var navigation = new ListView { Width = 160, SelectionMode = ListViewSelectionMode.Single, Items = { Strings.Get("Ui_1a866ebd4df9"), Strings.Get("Ui_a9d73061c250") }, SelectedIndex = 0 };
-        var layout = new Grid { Width = 720, MaxWidth = 720, ColumnSpacing = 24 };
-        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
+        var language = new ComboBox { Header = Strings.Get("GeneralLanguage"), HorizontalAlignment = HorizontalAlignment.Stretch, Items = { Strings.Get("GeneralSystemLanguage"), "简体中文", "繁體中文", "English" }, SelectedIndex = generalSettings.Language switch { "zh-CN" => 1, "zh-TW" => 2, "en-US" => 3, _ => 0 } };
+        var startup = new CheckBox { Content = Strings.Get("GeneralStartup"), IsChecked = GeneralSettings.StartupEnabled() };
+        var closeToTray = new CheckBox { Content = Strings.Get("GeneralCloseToTray"), IsChecked = generalSettings.CloseToTray };
+        var generalPanel = new StackPanel { Spacing = 18, Children = {
+            new TextBlock { Text = Strings.Get("GeneralTitle"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
+            language, startup, closeToTray,
+            new TextBlock { Text = Strings.Get("GeneralVersion") + "  v0.9.0_20261109" },
+            new TextBlock { Text = Strings.Get("GeneralLicense") + "  MIT License" } } };
+        ListViewItem SettingsNavigationItem(string label, string path)
+        {
+            var icon = (Microsoft.UI.Xaml.Shapes.Path)Microsoft.UI.Xaml.Markup.XamlReader.Load(
+                "<Path xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Width='20' Height='20' Stretch='Uniform' Stroke='{ThemeResource HeadingBrush}' StrokeThickness='1.6' StrokeStartLineCap='Round' StrokeEndLineCap='Round' StrokeLineJoin='Round' Data='" + path + "'/>");
+            var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, VerticalAlignment = VerticalAlignment.Center };
+            content.Children.Add(icon);
+            content.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+            return new ListViewItem { Content = content, MinHeight = 56, Padding = new Thickness(14, 10, 14, 10), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        }
+        var navigation = new ListView { SelectionMode = ListViewSelectionMode.Single, Margin = new Thickness(12, 20, 12, 12), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        navigation.Items.Add(SettingsNavigationItem(Strings.Get("GeneralTitle"), "M 12,3 L 13.2,3 L 13.8,5.3 L 15.4,6 L 17.5,4.8 L 19.2,6.5 L 18,8.6 L 18.7,10.2 L 21,10.8 L 21,13.2 L 18.7,13.8 L 18,15.4 L 19.2,17.5 L 17.5,19.2 L 15.4,18 L 13.8,18.7 L 13.2,21 L 10.8,21 L 10.2,18.7 L 8.6,18 L 6.5,19.2 L 4.8,17.5 L 6,15.4 L 5.3,13.8 L 3,13.2 L 3,10.8 L 5.3,10.2 L 6,8.6 L 4.8,6.5 L 6.5,4.8 L 8.6,6 L 10.2,5.3 L 10.8,3 Z M 15,12 A 3,3 0 1 1 9,12 A 3,3 0 1 1 15,12"));
+        navigation.Items.Add(SettingsNavigationItem(Strings.Get("Ui_1a866ebd4df9"), "M 3,6 L 21,6 L 21,18 L 3,18 Z M 3,7 L 12,13 L 21,7"));
+        navigation.Items.Add(SettingsNavigationItem(Strings.Get("Ui_a9d73061c250"), "M 8,3 L 16,3 L 16,6 L 19,6 L 19,18 L 16,18 L 16,21 L 8,21 L 8,18 L 5,18 L 5,6 L 8,6 Z M 9,10 L 9,11 M 15,10 L 15,11 M 9,15 L 15,15 M 12,3 L 12,1"));
+        navigation.SelectedIndex = 0;
+        var layout = new Grid();
+        var navigationColumn = new ColumnDefinition { Width = new GridLength(MailColumn.ActualWidth > 0 ? MailColumn.ActualWidth : MailColumn.Width.Value) };
+        layout.ColumnDefinitions.Add(navigationColumn);
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        layout.SizeChanged += UpdateSettingsColumn;
+        void UpdateSettingsColumn(object sender, SizeChangedEventArgs args) => navigationColumn.Width = new GridLength(MailColumn.ActualWidth);
         layout.Children.Add(navigation);
-        var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        var save = new Button { Content = Strings.Get("Ui_847fc8062342") };
-        navigation.SelectionChanged += async (_, _) => { scroll.Content = navigation.SelectedIndex == 0 ? panel : aiPanel; save.Content = navigation.SelectedIndex == 0 ? Strings.Get("Ui_847fc8062342") : Strings.Get("Ui_fadf24dbc5a9"); error.Text = ""; if (navigation.SelectedIndex == 1) await RefreshModelsAsync(); };
+        var scroll = new ScrollViewer { Content = generalPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        var save = new Button { Content = Strings.Get("Ui_fadf24dbc5a9") };
+        navigation.SelectionChanged += async (_, _) => { scroll.Content = navigation.SelectedIndex == 0 ? generalPanel : navigation.SelectedIndex == 1 ? panel : aiPanel; save.Content = navigation.SelectedIndex == 1 ? Strings.Get("Ui_847fc8062342") : Strings.Get("Ui_fadf24dbc5a9"); error.Text = ""; if (navigation.SelectedIndex == 2) await RefreshModelsAsync(); };
         var cancel = new Button { Content = Strings.Get("Ui_4d0b4688c787") };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0), Children = { cancel, save } };
-        var page = new Grid { Height = 500, RowSpacing = 8 };
+        var page = new Grid { RowSpacing = 8, Padding = new Thickness(24, 24, 24, 20) };
         page.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -1534,9 +1630,7 @@ public sealed partial class MainWindow : Window
         Grid.SetRow(error, 1); page.Children.Add(error);
         Grid.SetRow(actions, 2); page.Children.Add(actions);
         Grid.SetColumn(page, 1); layout.Children.Add(page);
-        var dialog = new ContentDialog { XamlRoot = ComposeWorkspace.XamlRoot, Title = Strings.Get("Ui_7debf9cb0372"), Content = layout };
-        dialog.Resources["ContentDialogMaxWidth"] = 800.0;
-        bool saved = false;
+        SettingsView.Child = layout;
         relabel.Click += async (_, _) =>
         {
             if (!decision.Settings.Enabled) { error.Text = Strings.Get("Ui_581f3e8a08c2"); return; }
@@ -1549,13 +1643,23 @@ public sealed partial class MainWindow : Window
             }
             finally { if (!closing) relabel.IsEnabled = true; }
         };
-        cancel.Click += (_, _) => dialog.Hide();
+        cancel.Click += (_, _) => { SettingsView.Visibility = Visibility.Collapsed; UpdateFolderSelection(folder); };
         save.Click += async (_, _) =>
         {
             save.IsEnabled = false; cancel.IsEnabled = false;
             try
             {
-                if (navigation.SelectedIndex == 1)
+                if (navigation.SelectedIndex == 0)
+                {
+                    var updated = new GeneralSettings(language.SelectedIndex switch { 1 => "zh-CN", 2 => "zh-TW", 3 => "en-US", _ => "system" }, closeToTray.IsChecked == true);
+                    GeneralSettings.SetStartup(startup.IsChecked == true);
+                    updated.Save();
+                    bool languageChanged = updated.Language != generalSettings.Language;
+                    generalSettings = updated;
+                    error.Text = Strings.Get(languageChanged ? "GeneralRestart" : "GeneralSaved");
+                    return;
+                }
+                if (navigation.SelectedIndex == 2)
                 {
                     if (!int.TryParse(aiPort.Text, out int aiNumber) || aiNumber < 1 || aiNumber > 65535 || (enabled.IsChecked == true && model.SelectedItem is not string)) { error.Text = Strings.Get("Ui_10118cb066b5"); return; }
                     var settings = new AiSettings(engine.SelectedItem?.ToString() ?? "LM Studio", aiNumber, model.SelectedItem as string ?? "", enabled.IsChecked == true, profile.Text.Trim(), chatModel.SelectedItem as string ?? "");
@@ -1568,18 +1672,16 @@ public sealed partial class MainWindow : Window
                     decision.Save(settings);
                     UpdateAgentModelLabel();
                     foreach (var item in messages) _ = ClassifyAsync(item);
-                    dialog.Hide(); return;
+                    error.Text = Strings.Get("GeneralSaved"); return;
                 }
                 if (string.IsNullOrWhiteSpace(address.Text) || string.IsNullOrWhiteSpace(host.Text) || string.IsNullOrWhiteSpace(secret.Password) || !int.TryParse(port.Text, out int number) || number < 1 || number > 65535) { error.Text = Strings.Get("Ui_793a10b4940d"); return; }
                 if (!int.TryParse(smtpPort.Text, out int smtpNumber) || smtpNumber < 1 || smtpNumber > 65535) { error.Text = Strings.Get("Ui_83d6267aa522"); return; }
                 var candidate = new MailAccount(address.Text.Trim(), string.IsNullOrWhiteSpace(user.Text) ? address.Text.Trim() : user.Text.Trim(), host.Text.Trim(), number, ssl.IsChecked != true, smtpHost.Text.Trim(), smtpNumber, smtpSsl.IsChecked != true);
-                error.Text = Strings.Get("Ui_0c2a21faf748"); await mail.TestAsync(candidate, secret.Password); mail.Save(candidate, secret.Password); folderInitialized = false; ShowAccount(candidate.Address); saved = true; dialog.Hide();
+                error.Text = Strings.Get("Ui_0c2a21faf748"); await mail.TestAsync(candidate, secret.Password); mail.Save(candidate, secret.Password); folderInitialized = false; ShowAccount(candidate.Address); await LoadFoldersAsync(); error.Text = Strings.Get("GeneralSaved");
             }
             catch (Exception ex) { if (!closing) error.Text = Strings.Get("Ui_a43d8b375652") + ex.Message; }
             finally { if (!closing) { save.IsEnabled = true; cancel.IsEnabled = true; } }
         };
-        await dialog.ShowAsync();
-        if (saved) await LoadFoldersAsync();
     }
     private async Task ShowNotice(string title, string content) => await new ContentDialog { XamlRoot = ComposeWorkspace.XamlRoot, Title = title, Content = content, CloseButtonText = Strings.Get("Ui_cb63c62e50f8") }.ShowAsync();
     private void LoadColumnWidths()
@@ -1593,6 +1695,7 @@ public sealed partial class MainWindow : Window
             MailColumn.Width = new GridLength(Math.Clamp(widths.Mail, 250, 800));
             expandedAiWidth = Math.Clamp(widths.Ai, 220, 800);
             AiColumn.Width = new GridLength(expandedAiWidth);
+            if (double.IsFinite(widths.Contacts)) ContactsView.ContactListWidth = widths.Contacts;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
     }
@@ -1601,7 +1704,7 @@ public sealed partial class MainWindow : Window
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(LayoutPath)!);
-            File.WriteAllText(LayoutPath, System.Text.Json.JsonSerializer.Serialize(new ColumnWidths(SidebarColumn.Width.Value, MailColumn.Width.Value, expandedAiWidth)));
+            File.WriteAllText(LayoutPath, System.Text.Json.JsonSerializer.Serialize(new ColumnWidths(SidebarColumn.Width.Value, MailColumn.Width.Value, expandedAiWidth, ContactsView.ContactListWidth)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }

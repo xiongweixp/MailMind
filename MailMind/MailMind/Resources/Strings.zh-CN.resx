@@ -238,6 +238,8 @@
   <data name="More_b6546a4db7e1" xml:space="preserve"><value>smtp.example.com（可稍后填写）</value></data>
   <data name="Fmt_9c3ab1d552d3" xml:space="preserve"><value>附件（{0}）</value></data>
   <data name="Fmt_b3c9b1921f64" xml:space="preserve"><value>附件（{0}）</value></data>
+  <data name="ResizeColumns" xml:space="preserve"><value>拖动调整栏目宽度</value></data>
+  <data name="CacheCount" xml:space="preserve"><value>本地缓存：{0} 封</value></data>
   <data name="Fmt_4f922a65014e" xml:space="preserve"><value>本地缓存：{0} 封 · 正在同步…</value></data>
   <data name="Fmt_682976292efe" xml:space="preserve"><value>离线缓存：已加载 {0} / {1} 封。连接失败：{2}</value></data>
   <data name="Fmt_51affa73cdfd" xml:space="preserve"><value>已加载 {0} / {1} 封</value></data>
@@ -294,4 +296,15 @@
   <data name="DeleteAction" xml:space="preserve"><value>删除</value></data>
   <data name="DeleteCancel" xml:space="preserve"><value>取消</value></data>
   <data name="DeleteFailed" xml:space="preserve"><value>删除邮件失败</value></data>
+  <data name="GeneralTitle" xml:space="preserve"><value>通用</value></data>
+  <data name="GeneralLanguage" xml:space="preserve"><value>显示语言</value></data>
+  <data name="GeneralSystemLanguage" xml:space="preserve"><value>跟随系统</value></data>
+  <data name="GeneralStartup" xml:space="preserve"><value>开机自启动</value></data>
+  <data name="GeneralCloseToTray" xml:space="preserve"><value>关闭时最小化到托盘</value></data>
+  <data name="GeneralVersion" xml:space="preserve"><value>版本号</value></data>
+  <data name="GeneralLicense" xml:space="preserve"><value>遵循协议</value></data>
+  <data name="GeneralRestart" xml:space="preserve"><value>设置已保存，重启应用后显示语言生效。</value></data>
+  <data name="GeneralSaved" xml:space="preserve"><value>设置已保存。</value></data>
+  <data name="TrayOpen" xml:space="preserve"><value>打开 MailMind</value></data>
+  <data name="TrayExit" xml:space="preserve"><value>退出</value></data>
 </root>

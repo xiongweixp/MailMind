@@ -231,7 +231,15 @@ public sealed class MailService
             if (found.Count < remote.Count) throw new InvalidDataException("The server did not return all message IDs.");
         }
         uint currentValidity = remote.UidValidity;
-        foreach (var batch in found.Chunk(50))
+        var complete = cache.CompleteUids(selected.Address, path, currentValidity);
+        var existing = found.Where(id => complete.Contains(id.Id)).ToList();
+        foreach (var batch in existing.Chunk(500))
+        {
+            var flags = await remote.FetchAsync(batch, MessageSummaryItems.UniqueId | MessageSummaryItems.Flags, token);
+            if (flags.Count != batch.Length) throw new InvalidDataException("The server message list changed during synchronization.");
+            cache.UpdateSeen(selected.Address, path, currentValidity, flags.Where(s => s.Flags.HasValue).Select(s => (s.UniqueId.Id, (s.Flags!.Value & MessageFlags.Seen) != 0)));
+        }
+        foreach (var batch in found.Where(id => !complete.Contains(id.Id)).Chunk(50))
         {
             token.ThrowIfCancellationRequested();
             IList<IMessageSummary> summaries;

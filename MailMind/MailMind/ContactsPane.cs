@@ -7,6 +7,7 @@ using System.Text;
 using Microsoft.Data.Sqlite;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
 namespace MailMind;
@@ -21,6 +22,12 @@ public sealed class ContactsPane : Grid
     private readonly TextBlock count = new() { Margin = new Thickness(12), Opacity = .65 };
     private List<Contact> contacts = new();
     private bool editing;
+    private readonly ColumnDefinition contactListColumn = new() { Width = new GridLength(340), MinWidth = 220 };
+    private bool resizingContacts;
+    private uint resizePointerId;
+    private double resizeStartX, resizeStartWidth;
+    public event Action? ContactListWidthChanged;
+    public double ContactListWidth { get => contactListColumn.Width.Value; set => contactListColumn.Width = new GridLength(Math.Clamp(value, 220, 800)); }
     private static readonly int[] InitialStarts = { -20319, -20284, -19776, -19219, -18711, -18527, -18240, -17923, -17418, -16475, -16213, -15641, -15166, -14923, -14915, -14631, -14150, -14091, -13319, -12839, -12557, -11848, -11056 };
     private static readonly Encoding PinyinEncoding = CreatePinyinEncoding();
     public event Action<string>? ComposeRequested;
@@ -64,13 +71,41 @@ public sealed class ContactsPane : Grid
         };
         var topActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 }; topActions.Children.Add(add); topActions.Children.Add(import);
         SetColumn(topActions, 1); top.Children.Add(topActions); shell.Children.Add(top);
-        var columns = new Grid(); columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(340) }); columns.ColumnDefinitions.Add(new ColumnDefinition());
+        var columns = new Grid(); columns.ColumnDefinitions.Add(contactListColumn); columns.ColumnDefinitions.Add(new ColumnDefinition());
         SetRow(columns, 1); shell.Children.Add(columns);
         left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); left.RowDefinitions.Add(new RowDefinition()); left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         search.TextChanged += (_, _) => Filter(); left.Children.Add(search);
         var filterLabel = new TextBlock { Text = Strings.Get("Contact_93362321e1bb"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(4, 0, 0, 0) }; SetRow(filterLabel, 1); left.Children.Add(filterLabel);
         list.SelectionChanged += (_, _) => ShowDetail(); SetRow(list, 2); left.Children.Add(list); SetRow(count, 3); left.Children.Add(count); columns.Children.Add(left);
         var scroll = new ScrollViewer { Content = detail, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }; SetColumn(scroll, 1); columns.Children.Add(scroll);
+        var splitter = new ColumnSplitter { Width = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        ToolTipService.SetToolTip(splitter, Strings.Get("ResizeColumns"));
+        splitter.PointerPressed += (_, e) =>
+        {
+            if (resizingContacts || !e.GetCurrentPoint(splitter).Properties.IsLeftButtonPressed || !splitter.CapturePointer(e.Pointer)) return;
+            resizingContacts = true; resizePointerId = e.Pointer.PointerId;
+            resizeStartX = e.GetCurrentPoint(columns).Position.X; resizeStartWidth = contactListColumn.ActualWidth;
+            e.Handled = true;
+        };
+        splitter.PointerMoved += (_, e) =>
+        {
+            if (!resizingContacts || e.Pointer.PointerId != resizePointerId) return;
+            double maxWidth = Math.Max(220, Math.Min(800, columns.ActualWidth - 300));
+            contactListColumn.Width = new GridLength(Math.Clamp(resizeStartWidth + e.GetCurrentPoint(columns).Position.X - resizeStartX, 220, maxWidth));
+            e.Handled = true;
+        };
+        splitter.PointerReleased += (_, e) =>
+        {
+            if (!resizingContacts || e.Pointer.PointerId != resizePointerId) return;
+            resizingContacts = false; splitter.ReleasePointerCapture(e.Pointer); ContactListWidthChanged?.Invoke(); e.Handled = true;
+        };
+        splitter.PointerCaptureLost += (_, e) =>
+        {
+            if (!resizingContacts || e.Pointer.PointerId != resizePointerId) return;
+            resizingContacts = false; ContactListWidthChanged?.Invoke();
+        };
+        columns.Children.Add(splitter);
+        columns.SizeChanged += (_, _) => contactListColumn.MaxWidth = Math.Max(220, Math.Min(800, columns.ActualWidth - 300));
         Refresh();
     }
     private SqliteConnection Open() { var db = new SqliteConnection(connection); db.Open(); return db; }
@@ -90,6 +125,24 @@ public sealed class ContactsPane : Grid
             matches.Add(new Contact(rows.GetInt64(0), name, email, rows.GetString(3), rows.GetString(4), rows.GetString(5), rows.GetString(6), rows.GetString(7)));
         }
         return (matches, false);
+    }
+    public List<Contact> SearchRecipients(string query, int limit = 12)
+    {
+        query = query.Trim();
+        if (query.Length == 0) return new();
+        using var db = Open(); using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT id,name,email,phone,company,department,title,notes FROM contacts ORDER BY name COLLATE NOCASE";
+        using var rows = cmd.ExecuteReader(); var matches = new List<Contact>();
+        while (rows.Read())
+        {
+            string name = rows.GetString(1), email = rows.GetString(2);
+            string pinyin = PinyinSearch.Transliterate(name);
+            string initials = string.Concat(name.Select(c => PinyinSearch.Transliterate(c.ToString()).FirstOrDefault()).Where(c => c != '\0'));
+            if (!name.Contains(query, StringComparison.OrdinalIgnoreCase) && !email.Contains(query, StringComparison.OrdinalIgnoreCase) && !pinyin.Contains(query, StringComparison.OrdinalIgnoreCase) && !initials.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
+            matches.Add(new Contact(rows.GetInt64(0), name, email, rows.GetString(3), rows.GetString(4), rows.GetString(5), rows.GetString(6), rows.GetString(7)));
+            if (matches.Count == limit) break;
+        }
+        return matches;
     }
     private int ImportCachedSenders()
     {

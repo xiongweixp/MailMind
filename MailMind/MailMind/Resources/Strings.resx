@@ -238,6 +238,8 @@
   <data name="More_b6546a4db7e1" xml:space="preserve"><value>smtp.example.com (optional for now)</value></data>
   <data name="Fmt_9c3ab1d552d3" xml:space="preserve"><value>Attachments ({0})</value></data>
   <data name="Fmt_b3c9b1921f64" xml:space="preserve"><value>Attachments ({0})</value></data>
+  <data name="ResizeColumns" xml:space="preserve"><value>Drag to resize columns</value></data>
+  <data name="CacheCount" xml:space="preserve"><value>Local cache: {0} messages</value></data>
   <data name="Fmt_4f922a65014e" xml:space="preserve"><value>Local cache: {0} messages · Syncing…</value></data>
   <data name="Fmt_682976292efe" xml:space="preserve"><value>Offline cache: {0} / {1} messages loaded. Connection failed: {2}</value></data>
   <data name="Fmt_51affa73cdfd" xml:space="preserve"><value>Loaded {0} / {1} messages</value></data>
@@ -294,4 +296,15 @@
   <data name="DeleteAction" xml:space="preserve"><value>Delete</value></data>
   <data name="DeleteCancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="DeleteFailed" xml:space="preserve"><value>Unable to delete message</value></data>
+  <data name="GeneralTitle" xml:space="preserve"><value>General</value></data>
+  <data name="GeneralLanguage" xml:space="preserve"><value>Display language</value></data>
+  <data name="GeneralSystemLanguage" xml:space="preserve"><value>Follow system</value></data>
+  <data name="GeneralStartup" xml:space="preserve"><value>Start with Windows</value></data>
+  <data name="GeneralCloseToTray" xml:space="preserve"><value>Minimize to tray on close</value></data>
+  <data name="GeneralVersion" xml:space="preserve"><value>Version</value></data>
+  <data name="GeneralLicense" xml:space="preserve"><value>License</value></data>
+  <data name="GeneralRestart" xml:space="preserve"><value>Settings saved. Restart the app to apply the display language.</value></data>
+  <data name="GeneralSaved" xml:space="preserve"><value>Settings saved.</value></data>
+  <data name="TrayOpen" xml:space="preserve"><value>Open MailMind</value></data>
+  <data name="TrayExit" xml:space="preserve"><value>Exit</value></data>
 </root>
