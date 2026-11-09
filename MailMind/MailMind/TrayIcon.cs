@@ -41,10 +41,10 @@ internal sealed class TrayIcon : IDisposable
         if (Shell_NotifyIcon(1, ref data)) DestroyIcon(old);
         else { data.Icon = old; DestroyIcon(icon); }
     }
-    public void Notify(string title, string summary)
+    public void Notify(string title, string message)
     {
         data.Flags = 0x10; data.InfoTitle = title.Length > 63 ? title[..63] : title;
-        data.Info = summary.Length > 255 ? summary[..255] : summary; data.InfoFlags = 1;
+        data.Info = message.Length > 255 ? message[..255] : message; data.InfoFlags = 1;
         Shell_NotifyIcon(1, ref data);
     }
     public int ShowMenu()

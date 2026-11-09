@@ -304,6 +304,7 @@
   <data name="GeneralLanguage" xml:space="preserve"><value>顯示語言</value></data>
   <data name="GeneralSystemLanguage" xml:space="preserve"><value>跟隨系統</value></data>
   <data name="GeneralStartup" xml:space="preserve"><value>開機自動啟動</value></data>
+  <data name="TrayImportantMail" xml:space="preserve"><value>收到重要郵件</value></data>
   <data name="GeneralCloseToTray" xml:space="preserve"><value>關閉時最小化至系統匣</value></data>
   <data name="GeneralVersion" xml:space="preserve"><value>版本號</value></data>
   <data name="GeneralLicense" xml:space="preserve"><value>遵循協議</value></data>

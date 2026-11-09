@@ -304,6 +304,7 @@
   <data name="GeneralLanguage" xml:space="preserve"><value>Display language</value></data>
   <data name="GeneralSystemLanguage" xml:space="preserve"><value>Follow system</value></data>
   <data name="GeneralStartup" xml:space="preserve"><value>Start with Windows</value></data>
+  <data name="TrayImportantMail" xml:space="preserve"><value>Important mail received</value></data>
   <data name="GeneralCloseToTray" xml:space="preserve"><value>Minimize to tray on close</value></data>
   <data name="GeneralVersion" xml:space="preserve"><value>Version</value></data>
   <data name="GeneralLicense" xml:space="preserve"><value>License</value></data>
