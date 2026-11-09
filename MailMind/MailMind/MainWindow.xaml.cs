@@ -475,7 +475,11 @@ public sealed partial class MainWindow : Window
                     {
                         var inbox = mail.CachedSearchItems(entry.Path);
                         if (before.Count > 0 || syncedInboxes.Contains(account.Address + "\n" + entry.Path))
-                            foreach (var item in inbox.Where(i => i.IsSeen == false && i.Uid > previousMaxUid && !before.Contains(MailKey(i)))) pendingNotifications.Add(MailKey(item));
+                        {
+                            var newItems = inbox.Where(i => i.Uid > previousMaxUid && !before.Contains(MailKey(i))).ToList();
+                            ContactsView.AddNewSenders(newItems, account.Address);
+                            foreach (var item in newItems.Where(i => i.IsSeen == false)) pendingNotifications.Add(MailKey(item));
+                        }
                         syncedInboxes.Add(account.Address + "\n" + entry.Path);
                         var scan = ScanInboxAsync(entry.Path);
                         classificationTasks.Add(scan); _ = ForgetClassificationAsync(scan);

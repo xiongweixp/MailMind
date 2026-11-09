@@ -184,6 +184,27 @@ public sealed class ContactsPane : Grid
         }
         return matches;
     }
+    public void AddNewSenders(IEnumerable<MailItem> messages, string accountEmail)
+    {
+        using var db = Open();
+        using var insert = db.CreateCommand();
+        insert.CommandText = "INSERT OR IGNORE INTO contacts(name,email,phone,company,department,title,notes) VALUES($name,$email,'','','','','')";
+        var name = insert.Parameters.Add("$name", SqliteType.Text);
+        var email = insert.Parameters.Add("$email", SqliteType.Text);
+        int added = 0;
+        foreach (var message in messages)
+        {
+            if (!MimeKit.InternetAddressList.TryParse(message.Sender, out var addresses)) continue;
+            foreach (var address in addresses.Mailboxes)
+            {
+                var senderEmail = address.Address.Trim();
+                if (string.IsNullOrWhiteSpace(address.Name) || string.IsNullOrWhiteSpace(senderEmail) || string.Equals(senderEmail, accountEmail, StringComparison.OrdinalIgnoreCase)) continue;
+                name.Value = address.Name.Trim(); email.Value = senderEmail;
+                added += insert.ExecuteNonQuery();
+            }
+        }
+        if (added > 0 && Visibility == Visibility.Visible) Refresh();
+    }
     private int ImportCachedSenders()
     {
         using var db = Open();
