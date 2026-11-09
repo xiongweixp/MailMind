@@ -235,7 +235,7 @@ public sealed class MailService
         if (cache.Validity(selected.Address, path) != currentValidity)
             cache.SetValidity(selected.Address, path, currentValidity);
         var complete = cache.CompleteUids(selected.Address, path, currentValidity);
-        var existing = found.Where(id => complete.Contains(id.Id)).ToList();
+        var existing = found.Where(id => complete.Contains(id.Id)).OrderBy(id => id.Id).ToList();
         foreach (var batch in existing.Chunk(500))
         {
             var flags = await remote.FetchAsync(batch, MessageSummaryItems.UniqueId | MessageSummaryItems.Flags, token);
@@ -247,6 +247,7 @@ public sealed class MailService
         foreach (var batch in missing.Take(10).Chunk(10))
         {
             token.ThrowIfCancellationRequested();
+            Array.Sort(batch, (left, right) => left.Id.CompareTo(right.Id));
             IList<IMessageSummary> summaries;
             try { summaries = await remote.FetchAsync(batch, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.PreviewText | MessageSummaryItems.Flags | MessageSummaryItems.BodyStructure, token); }
             catch (ImapCommandException) { summaries = await remote.FetchAsync(batch, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Flags | MessageSummaryItems.BodyStructure, token); }
