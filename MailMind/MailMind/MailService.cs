@@ -13,7 +13,7 @@ using Windows.Security.Credentials;
 
 namespace MailMind;
 
-public record MailAccount(string Address, string UserName, string ImapHost, int ImapPort, bool StartTls, string SmtpHost = "", int SmtpPort = 465, bool SmtpStartTls = false);
+public record MailAccount(string Address, string UserName, string ImapHost, int ImapPort, bool StartTls, string SmtpHost = "", int SmtpPort = 465, bool SmtpStartTls = false, string DisplayName = "");
 public record MailFolderInfo(string Path, string Name, int Depth, bool Selectable);
 public record MailItem(uint Uid, string Sender, string Subject, string Date, string Preview, bool? IsSeen) : System.ComponentModel.INotifyPropertyChanged
 {
@@ -116,6 +116,7 @@ public sealed class MailService
 {
     private const string VaultResource = "MailMind.IMAP";
     private static readonly string ConfigPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailMind", "account.json");
+    private static readonly string AccountsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailMind", "accounts.json");
     private readonly PasswordVault vault = new();
     private readonly MailCache cache = new();
     private uint validity;
@@ -127,6 +128,8 @@ public sealed class MailService
     private string? folderName;
     private bool cachedOnly;
     public MailAccount? Account => account;
+    private readonly List<MailAccount> accounts = new();
+    public IReadOnlyList<MailAccount> Accounts => accounts;
     public string? CachedClassification(MailItem item, string fingerprint) => cache.Classification(item, fingerprint);
     public void CacheClassification(MailItem item, string fingerprint, string label) => cache.PutClassification(item, fingerprint, label);
     public List<MailItem> CachedSearchItems(string path)
@@ -158,9 +161,10 @@ public sealed class MailService
 
     public void Load()
     {
-        if (!File.Exists(ConfigPath)) return;
-        account = JsonSerializer.Deserialize<MailAccount>(File.ReadAllText(ConfigPath));
+        if (File.Exists(AccountsPath)) accounts.AddRange(JsonSerializer.Deserialize<List<MailAccount>>(File.ReadAllText(AccountsPath)) ?? new());
+        if (File.Exists(ConfigPath)) account = JsonSerializer.Deserialize<MailAccount>(File.ReadAllText(ConfigPath));
         if (account == null) return;
+        if (!accounts.Any(a => string.Equals(a.Address, account.Address, StringComparison.OrdinalIgnoreCase))) accounts.Add(account);
         try { var credential = vault.Retrieve(VaultResource, account.Address); credential.RetrievePassword(); password = credential.Password; }
         catch (Exception) { password = null; }
     }
@@ -170,10 +174,25 @@ public sealed class MailService
         await ConnectAsync(client, candidate, secret);
         await client.DisconnectAsync(true);
     }
+    public async Task TestSmtpAsync(MailAccount candidate, string secret)
+    {
+        using var client = new MailKit.Net.Smtp.SmtpClient { Timeout = 30000 };
+        await client.ConnectAsync(candidate.SmtpHost, candidate.SmtpPort, candidate.SmtpStartTls ? SecureSocketOptions.StartTls : SecureSocketOptions.SslOnConnect);
+        await client.AuthenticateAsync(candidate.UserName, secret);
+        await client.DisconnectAsync(true);
+    }
+    public string StoredPassword(string address)
+    {
+        try { var credential = vault.Retrieve(VaultResource, address); credential.RetrievePassword(); return credential.Password; }
+        catch (Exception) { return ""; }
+    }
     public void Save(MailAccount candidate, string secret)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
         vault.Add(new PasswordCredential(VaultResource, candidate.Address, secret));
+        accounts.RemoveAll(a => string.Equals(a.Address, candidate.Address, StringComparison.OrdinalIgnoreCase));
+        accounts.Add(candidate);
+        File.WriteAllText(AccountsPath, JsonSerializer.Serialize(accounts));
         File.WriteAllText(ConfigPath, JsonSerializer.Serialize(candidate));
         account = candidate; password = secret; ids.Clear(); folderName = null;
     }
@@ -183,7 +202,7 @@ public sealed class MailService
         if (from != selected.Address || string.IsNullOrEmpty(password)) throw new InvalidOperationException(Strings.Get("More_c4bfac5f682f"));
         if (string.IsNullOrWhiteSpace(selected.SmtpHost) || selected.SmtpPort is < 1 or > 65535) throw new InvalidOperationException(Strings.Get("More_2c207ab6b221"));
         var message = new MimeMessage();
-        message.From.Add(MailboxAddress.Parse(selected.Address));
+        message.From.Add(new MailboxAddress(selected.DisplayName, selected.Address));
         if (!InternetAddressList.TryParse(to, out var recipients) || recipients.Mailboxes.Count() == 0) throw new InvalidOperationException(Strings.Get("More_6a66c747edcb"));
         message.To.AddRange(recipients);
         if (!string.IsNullOrWhiteSpace(cc))

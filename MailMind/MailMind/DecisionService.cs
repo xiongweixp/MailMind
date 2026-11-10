@@ -4,13 +4,16 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.Json.Serialization;
+using Windows.Security.Credentials;
 
 namespace MailMind;
 
-public record AiSettings(string Engine = "LM Studio", int Port = 1234, string Model = "", bool Enabled = false, string Profile = "", string ChatModel = "", string AssistantName = "");
+public record AiSettings(string Engine = "LM Studio", int Port = 1234, string Model = "", bool Enabled = false, string Profile = "", string ChatModel = "", string AssistantName = "", string ChatEngine = "", string ChatBaseUrl = "", bool AllowRemoteChat = false, string Soul = "", string DecisionBaseUrl = "", bool AllowRemoteDecision = false, [property: JsonIgnore] string DecisionAccessKey = "", [property: JsonIgnore] string ChatAccessKey = "");
 public record AiModel(string Id, string Type);
 
 public sealed class DecisionService
@@ -19,11 +22,46 @@ public sealed class DecisionService
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(180) };
     private static readonly JsonSerializerOptions StateJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     public AiSettings Settings { get; private set; } = new();
-    public void Load() { if (File.Exists(PathName)) Settings = JsonSerializer.Deserialize<AiSettings>(File.ReadAllText(PathName)) ?? new(); }
-    public void Save(AiSettings settings) { Directory.CreateDirectory(Path.GetDirectoryName(PathName)!); File.WriteAllText(PathName, JsonSerializer.Serialize(settings)); Settings = settings; }
+    private const string VaultResource = "MailMind.AI";
+    private static string CredentialName(string role, string address) => role + ":" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(address.Trim().TrimEnd('/'))));
+    public static string GetAccessKey(string role, string address)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return "";
+        try { var credential = new PasswordVault().Retrieve(VaultResource, CredentialName(role, address)); credential.RetrievePassword(); return credential.Password; }
+        catch (Exception) { return ""; }
+    }
+    private static void SaveAccessKey(string role, string address, string key)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return;
+        var vault = new PasswordVault();
+        string name = CredentialName(role, address);
+        if (!string.IsNullOrWhiteSpace(key)) vault.Add(new PasswordCredential(VaultResource, name, key));
+        else
+        {
+            try { vault.Remove(vault.Retrieve(VaultResource, name)); }
+            catch (Exception) { }
+        }
+    }
+    public void Load()
+    {
+        if (!File.Exists(PathName)) return;
+        var settings = JsonSerializer.Deserialize<AiSettings>(File.ReadAllText(PathName)) ?? new();
+        Settings = settings with { DecisionAccessKey = GetAccessKey("decision", settings.DecisionBaseUrl), ChatAccessKey = GetAccessKey("chat", settings.ChatBaseUrl) };
+    }
+    public void Save(AiSettings settings)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(PathName)!);
+        if (settings.Engine == "自定义服务") SaveAccessKey("decision", settings.DecisionBaseUrl, settings.DecisionAccessKey);
+        if (settings.ChatEngine == "自定义服务") SaveAccessKey("chat", settings.ChatBaseUrl, settings.ChatAccessKey);
+        File.WriteAllText(PathName, JsonSerializer.Serialize(settings)); Settings = settings;
+    }
+    public static void SetAuthorization(HttpRequestMessage request, string key)
+    {
+        if (!string.IsNullOrWhiteSpace(key)) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key.Trim());
+    }
     public static string Fingerprint(AiSettings settings, MailItem item, string body)
     {
-        var input = JsonSerializer.Serialize(new { version = 4, settings.Engine, settings.Port, settings.Model, settings.Profile, item.Sender, item.Subject, item.Date, item.Preview, body });
+        var input = JsonSerializer.Serialize(new { version = 5, settings.Engine, settings.Port, settings.DecisionBaseUrl, settings.Model, settings.Profile, item.Sender, item.Subject, item.Date, item.Preview, body });
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input)));
     }
     public async Task<List<AiModel>> ListModelsAsync(string engine, int port, CancellationToken token = default)
@@ -35,8 +73,47 @@ public sealed class DecisionService
         var models = json.RootElement.GetProperty(engine == "LM Studio" ? "models" : "data");
         return models.EnumerateArray().Select(m => new AiModel(m.GetProperty(engine == "LM Studio" ? "key" : "id").GetString() ?? "", m.TryGetProperty("type", out var type) ? type.GetString() ?? "llm" : "llm")).Where(m => m.Id.Length > 0).ToList();
     }
+    public static string ChatBaseAddress(AiSettings settings) => settings.ChatEngine switch
+    {
+        "自定义服务" => settings.ChatBaseUrl.Trim().TrimEnd('/'),
+        "LM Studio" => "http://127.0.0.1:1234/v1",
+        "Lemonade Server" => "http://127.0.0.1:13305/v1",
+        _ => $"http://127.0.0.1:{settings.Port}/v1"
+    };
+    public static bool IsLocalAddress(string address) => Uri.TryCreate(address, UriKind.Absolute, out var uri) && uri.IsLoopback;
+    public async Task<List<AiModel>> ListChatModelsAsync(string engine, string address, string accessKey = "", CancellationToken token = default)
+    {
+        if (engine == "LM Studio") return await ListModelsAsync(engine, 1234, token);
+        if (engine == "Lemonade Server") return await ListModelsAsync(engine, 13305, token);
+        using var request = new HttpRequestMessage(HttpMethod.Get, address.TrimEnd('/') + "/models");
+        SetAuthorization(request, accessKey);
+        using var response = await Client.SendAsync(request, token);
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
+        return json.RootElement.GetProperty("data").EnumerateArray().Select(m => new AiModel(m.GetProperty("id").GetString() ?? "", "llm")).Where(m => m.Id.Length > 0).ToList();
+    }
+    public async Task TestChatAsync(string address, string model, string accessKey = "", CancellationToken token = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, address.TrimEnd('/') + "/chat/completions") { Content = JsonContent.Create(new { model, messages = new[] { new { role = "user", content = "Reply OK." } }, max_tokens = 8 }) };
+        SetAuthorization(request, accessKey);
+        using var response = await Client.SendAsync(request, token);
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
+        _ = json.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+    }
     private static async Task<string> DecideAsync(AiSettings settings, string state, string instructions, object criteria, CancellationToken token)
     {
+        if (settings.Engine == "自定义服务")
+        {
+            if (!IsLocalAddress(settings.DecisionBaseUrl) && !settings.AllowRemoteDecision) throw new InvalidOperationException("请先允许向非本机决策服务发送邮件内容。");
+            var messages = new[] { new { role = "system", content = instructions + " Return only one choice key from: " + JsonSerializer.Serialize(criteria) }, new { role = "user", content = state } };
+            using var chatRequest = new HttpRequestMessage(HttpMethod.Post, settings.DecisionBaseUrl.TrimEnd('/') + "/chat/completions") { Content = JsonContent.Create(new { model = settings.Model, messages, temperature = 0 }) };
+            SetAuthorization(chatRequest, settings.DecisionAccessKey);
+            using var chatResponse = await Client.SendAsync(chatRequest, token);
+            chatResponse.EnsureSuccessStatusCode();
+            using var chatJson = JsonDocument.Parse(await chatResponse.Content.ReadAsStringAsync(token));
+            return (chatJson.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "").Trim().Trim('"', '\'', '.', ' ' ).ToLowerInvariant();
+        }
         var request = new { model = settings.Model, state, questions = new { result = new { type = "choice", instructions, criteria } } };
         using var response = await Client.PostAsJsonAsync($"http://127.0.0.1:{settings.Port}/v1/systemone", request, token);
         var content = await response.Content.ReadAsStringAsync(token);

@@ -1982,7 +1982,28 @@ public sealed partial class MainWindow : Window
     {
         if (ComposeWorkspace.Visibility == Visibility.Visible) { await ShowNotice(Strings.Get("Ui_ef40431c5873"), Strings.Get("Ui_9b64d64a01dd")); return; }
         ContactsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Visible; UpdateFolderSelection(folder);
+        Border SettingsCard(params UIElement[] children)
+        {
+            var contents = new StackPanel { Spacing = 12 };
+            foreach (var child in children) contents.Children.Add(child);
+            var card = (Border)Microsoft.UI.Xaml.Markup.XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource SurfaceBrush}' BorderBrush='{ThemeResource DividerBrush}' BorderThickness='1' CornerRadius='10' Padding='20'/>");
+            card.Child = contents;
+            return card;
+        }
+        TextBlock CardTitle(string text) => new() { Text = text, FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        Grid FieldRow(string label, FrameworkElement field)
+        {
+            var row = new Grid { ColumnSpacing = 12 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+            Grid.SetColumn(field, 1); row.Children.Add(field);
+            field.HorizontalAlignment = HorizontalAlignment.Stretch;
+            if (!string.IsNullOrEmpty(label)) Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(field, label);
+            return row;
+        }
         var a = mail.Account;
+        var displayName = new TextBox { Text = a?.DisplayName ?? "" };
         var address = new TextBox { Header = Strings.Get("Ui_b13ddae6cbad"), Text = a?.Address ?? "", PlaceholderText = "name@example.com" };
         var user = new TextBox { Header = Strings.Get("Ui_e9fe4dd6cc42"), Text = a?.UserName ?? "", PlaceholderText = Strings.Get("Ui_dabfb7535cc5") };
         var host = new TextBox { Header = Strings.Get("Ui_32503cb354f7"), Text = a?.ImapHost ?? "", PlaceholderText = "imap.example.com" };
@@ -1997,20 +2018,111 @@ public sealed partial class MainWindow : Window
         smtpSsl.Unchecked += (_, _) => smtpPort.Text = "587";
         var secret = new PasswordBox { Header = Strings.Get("Ui_e63f130046f4"), PlaceholderText = Strings.Get("Ui_c53b1b5a1719") };
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Firebrick) };
-        var panel = new StackPanel { Spacing = 10, Children = {
+        address.Header = user.Header = host.Header = port.Header = smtpHost.Header = smtpPort.Header = secret.Header = null;
+        var imapSecurity = new ComboBox { Items = { "SSL/TLS", "STARTTLS" }, SelectedIndex = a?.StartTls == true ? 1 : 0 };
+        var smtpSecurity = new ComboBox { Items = { "SSL/TLS", "STARTTLS" }, SelectedIndex = a?.SmtpStartTls == true ? 1 : 0 };
+        imapSecurity.SelectionChanged += (_, _) => ssl.IsChecked = imapSecurity.SelectedIndex == 0;
+        smtpSecurity.SelectionChanged += (_, _) => smtpSsl.IsChecked = smtpSecurity.SelectedIndex == 0;
+        var accountTabs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        void FillAccount(MailAccount? account)
+        {
+            displayName.Text = account?.DisplayName ?? ""; address.Text = account?.Address ?? ""; user.Text = account?.UserName ?? "";
+            host.Text = account?.ImapHost ?? ""; smtpHost.Text = account?.SmtpHost ?? "";
+            imapSecurity.SelectedIndex = account?.StartTls == true ? 1 : 0; smtpSecurity.SelectedIndex = account?.SmtpStartTls == true ? 1 : 0;
+            port.Text = (account?.ImapPort ?? 993).ToString(); smtpPort.Text = (account?.SmtpPort ?? 465).ToString();
+            secret.Password = account == null ? "" : mail.StoredPassword(account.Address); error.Text = "";
+        }
+        void RefreshAccountTabs()
+        {
+            accountTabs.Children.Clear();
+            foreach (var account in mail.Accounts)
+            {
+                var tab = new Button { Content = account.Address, CornerRadius = new CornerRadius(8) };
+                tab.Click += (_, _) => FillAccount(account); accountTabs.Children.Add(tab);
+            }
+            var add = new Button { Content = "+ 添加邮箱", CornerRadius = new CornerRadius(8) };
+            add.Click += (_, _) => FillAccount(null); accountTabs.Children.Add(add);
+        }
+        RefreshAccountTabs();
+        if (a != null) FillAccount(a);
+        var testImap = new Button { Content = "测试收件连接", HorizontalAlignment = HorizontalAlignment.Right };
+        var testSmtp = new Button { Content = "测试发件连接", HorizontalAlignment = HorizontalAlignment.Right };
+        Grid ServerHeading(string title, Button test)
+        {
+            var heading = new Grid { ColumnSpacing = 10 };
+            heading.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var text = CardTitle(title); text.VerticalAlignment = VerticalAlignment.Center;
+            heading.Children.Add(text); Grid.SetColumn(test, 1); heading.Children.Add(test);
+            return heading;
+        }
+        MailAccount CurrentAccount() => new(address.Text.Trim(), string.IsNullOrWhiteSpace(user.Text) ? address.Text.Trim() : user.Text.Trim(), host.Text.Trim(), int.TryParse(port.Text, out var ip) ? ip : 0, imapSecurity.SelectedIndex == 1, smtpHost.Text.Trim(), int.TryParse(smtpPort.Text, out var sp) ? sp : 0, smtpSecurity.SelectedIndex == 1, displayName.Text.Trim());
+        testImap.Click += async (_, _) => { testImap.IsEnabled = false; try { await mail.TestAsync(CurrentAccount(), secret.Password); error.Text = "收件连接成功"; } catch (Exception ex) { error.Text = ex.Message; } finally { testImap.IsEnabled = true; } };
+        testSmtp.Click += async (_, _) => { testSmtp.IsEnabled = false; try { await mail.TestSmtpAsync(CurrentAccount(), secret.Password); error.Text = "发件连接成功"; } catch (Exception ex) { error.Text = ex.Message; } finally { testSmtp.IsEnabled = true; } };
+        var panel = new StackPanel { Spacing = 16, Children = {
             new TextBlock { Text = Strings.Get("Ui_1a866ebd4df9"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
-            new TextBlock { Text = Strings.Get("Ui_9f7d652cf2ce"), TextWrapping = TextWrapping.Wrap },
-            address, user, secret,
-            new TextBlock { Text = Strings.Get("Ui_2d980c4eb4f6"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 0) },
-            host, port, ssl,
-            new TextBlock { Text = Strings.Get("Ui_07edb49543ea"), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 0) },
-            smtpHost, smtpPort, smtpSsl } };
+            new ScrollViewer { Content = accountTabs, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled },
+            SettingsCard(CardTitle("账户信息"), FieldRow("显示名", displayName), FieldRow("邮箱地址", address), FieldRow("用户名", user), FieldRow("密码或授权码", secret)),
+            SettingsCard(ServerHeading("收件服务器  IMAP", testImap), FieldRow("服务器", host), FieldRow("端口", port), FieldRow("加密方式", imapSecurity)),
+            SettingsCard(ServerHeading("发件服务器  SMTP", testSmtp), FieldRow("服务器", smtpHost), FieldRow("端口", smtpPort), FieldRow("加密方式", smtpSecurity)) } };
         var ai = decision.Settings;
         var assistantName = new TextBox { Header = Strings.Get("AssistantName"), Text = ai.AssistantName ?? "", PlaceholderText = Strings.Get("Ui_5341ec296262") };
-        var engine = new ComboBox { Header = Strings.Get("Ui_a7836c9c9281"), HorizontalAlignment = HorizontalAlignment.Stretch, Items = { "LM Studio", "Lemonade Server" }, SelectedIndex = ai.Engine == "Lemonade Server" ? 1 : 0 };
+        var engine = new ComboBox { Header = "决策模型服务", HorizontalAlignment = HorizontalAlignment.Stretch, Items = { "LM Studio", "Lemonade Server", "自定义服务" }, SelectedIndex = ai.Engine switch { "Lemonade Server" => 1, "自定义服务" => 2, _ => 0 } };
+        var decisionUrl = new TextBox { Header = "服务地址", PlaceholderText = "http://localhost:8080/v1", Text = ai.DecisionBaseUrl ?? "", Visibility = ai.Engine == "自定义服务" ? Visibility.Visible : Visibility.Collapsed };
+        var decisionKey = new PasswordBox { PlaceholderText = "可选 Access Key", Password = ai.DecisionAccessKey ?? "" };
+        var decisionConsent = new ToggleSwitch { Header = "允许向非本机决策服务发送邮件内容", OnContent = "允许", OffContent = "不允许", IsOn = ai.AllowRemoteDecision, Visibility = ai.Engine == "自定义服务" && !DecisionService.IsLocalAddress(ai.DecisionBaseUrl ?? "") ? Visibility.Visible : Visibility.Collapsed };
+        decisionUrl.TextChanged += (_, _) => { decisionKey.Password = ""; decisionConsent.IsOn = false; decisionConsent.Visibility = engine.SelectedIndex == 2 && !DecisionService.IsLocalAddress(decisionUrl.Text) ? Visibility.Visible : Visibility.Collapsed; };
         var aiPort = new TextBox { Header = Strings.Get("Ui_6cbb7335b5b5"), Text = ai.Port.ToString() };
         var model = new ComboBox { Header = Strings.Get("Ui_b234d4ad9635"), HorizontalAlignment = HorizontalAlignment.Stretch };
         var chatModel = new ComboBox { Header = Strings.Get("Ui_482ffd920224"), HorizontalAlignment = HorizontalAlignment.Stretch };
+        if (!string.IsNullOrWhiteSpace(ai.Model)) { model.Items.Add(ai.Model); model.SelectedItem = ai.Model; }
+        if (!string.IsNullOrWhiteSpace(ai.ChatModel)) { chatModel.Items.Add(ai.ChatModel); chatModel.SelectedItem = ai.ChatModel; }
+        var chatEngine = new ComboBox { Header = "生成模型服务", HorizontalAlignment = HorizontalAlignment.Stretch, Items = { "LM Studio", "Lemonade Server", "自定义服务" }, SelectedIndex = (ai.ChatEngine == "" ? ai.Engine : ai.ChatEngine) switch { "Lemonade Server" => 1, "自定义服务" => 2, _ => 0 } };
+        var chatUrl = new TextBox { Header = "服务地址", PlaceholderText = "http://localhost:8080/v1", Text = ai.ChatBaseUrl ?? "" };
+        var chatKey = new PasswordBox { PlaceholderText = "可选 Access Key", Password = ai.ChatAccessKey ?? "" };
+        var remoteConsent = new ToggleSwitch { Header = "非本机服务将接收邮件内容", OnContent = "允许", OffContent = "不允许", IsOn = ai.AllowRemoteChat };
+        var chatStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        var refreshChat = new Button { Content = "获取生成模型" };
+        var testChat = new Button { Content = "检测" };
+        testChat.Click += async (_, _) =>
+        {
+            testChat.IsEnabled = false;
+            try
+            {
+                if (chatModel.SelectedItem is not string selected) { chatStatus.Text = "请先选择生成模型。"; return; }
+                var candidate = ai with { ChatEngine = chatEngine.SelectedItem?.ToString() ?? "LM Studio", ChatBaseUrl = chatUrl.Text.Trim() };
+                await decision.TestChatAsync(DecisionService.ChatBaseAddress(candidate), selected, chatEngine.SelectedIndex == 2 ? chatKey.Password : "", windowLifetime.Token);
+                chatStatus.Text = "检测成功";
+            }
+            catch (Exception ex) { if (!closing) chatStatus.Text = ex.Message; }
+            finally { if (!closing) testChat.IsEnabled = true; }
+        };
+        void UpdateChatVisibility()
+        {
+            chatUrl.Visibility = chatEngine.SelectedIndex == 2 ? Visibility.Visible : Visibility.Collapsed;
+            remoteConsent.Visibility = chatEngine.SelectedIndex == 2 && !DecisionService.IsLocalAddress(chatUrl.Text) ? Visibility.Visible : Visibility.Collapsed;
+        }
+        chatEngine.SelectionChanged += (_, _) => { chatModel.Items.Clear(); remoteConsent.IsOn = false; UpdateChatVisibility(); };
+        chatUrl.TextChanged += (_, _) => { chatKey.Password = ""; remoteConsent.IsOn = false; UpdateChatVisibility(); };
+        UpdateChatVisibility();
+        refreshChat.Click += async (_, _) =>
+        {
+            refreshChat.IsEnabled = false;
+            try
+            {
+                var service = chatEngine.SelectedItem?.ToString() ?? "LM Studio";
+                if (service == "自定义服务" && (!Uri.TryCreate(chatUrl.Text.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))) { chatStatus.Text = "请输入有效的 HTTP 或 HTTPS 服务地址。"; return; }
+                var selected = chatModel.SelectedItem as string ?? ai.ChatModel;
+                var models = await decision.ListChatModelsAsync(service, chatUrl.Text.Trim(), chatKey.Password, windowLifetime.Token);
+                chatModel.Items.Clear();
+                foreach (var entry in models) if (entry.Type is "llm" or "vlm") chatModel.Items.Add(entry.Id);
+                if (chatModel.Items.Contains(selected)) chatModel.SelectedItem = selected;
+                else if (chatModel.Items.Count > 0) chatModel.SelectedIndex = 0;
+                chatStatus.Text = $"找到 {chatModel.Items.Count} 个模型";
+            }
+            catch (Exception ex) { if (!closing) chatStatus.Text = ex.Message; }
+            finally { if (!closing) refreshChat.IsEnabled = true; }
+        };
         var profile = new TextBox { Header = Strings.Get("Ui_9612b1d325da"), Text = ai.Profile ?? "", PlaceholderText = Strings.Get("Ui_38ef3ea7df8d"), AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 100 };
         var modelStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
         var refreshModels = new Button { Content = Strings.Get("Ui_fa199b22e631") };
@@ -2023,34 +2135,117 @@ public sealed partial class MainWindow : Window
             try
             {
                 modelStatus.Text = Strings.Get("Ui_b66432e5ffb0");
-                var models = await decision.ListModelsAsync(engine.SelectedItem?.ToString() ?? "LM Studio", number, windowLifetime.Token);
+                var models = engine.SelectedIndex == 2 ? await decision.ListChatModelsAsync("自定义服务", decisionUrl.Text.Trim(), decisionKey.Password, windowLifetime.Token) : await decision.ListModelsAsync(engine.SelectedItem?.ToString() ?? "LM Studio", number, windowLifetime.Token);
                 if (closing) return;
-                model.Items.Clear(); chatModel.Items.Clear();
+                model.Items.Clear();
                 foreach (var entry in models)
                 {
-                    if (entry.Type == "decision") model.Items.Add(entry.Id);
-                    else if (entry.Type is "llm" or "vlm") chatModel.Items.Add(entry.Id);
+                    if (entry.Type == "decision" || engine.SelectedIndex == 2) model.Items.Add(entry.Id);
                 }
                 if (model.Items.Contains(selectedDecision)) model.SelectedItem = selectedDecision;
                 else if (model.Items.Count > 0) model.SelectedIndex = 0;
-                if (chatModel.Items.Contains(selectedChat)) chatModel.SelectedItem = selectedChat;
-                else if (chatModel.Items.Count > 0) chatModel.SelectedIndex = 0;
+                if (chatModel.Items.Count == 0 && !string.IsNullOrWhiteSpace(selectedChat)) { chatModel.Items.Add(selectedChat); chatModel.SelectedItem = selectedChat; }
                 modelStatus.Text = string.Format(Strings.Get("Fmt_c5a7c143ddeb"), model.Items.Count, chatModel.Items.Count);
             }
             catch (Exception ex) { if (!closing) modelStatus.Text = Strings.Get("Ui_90a2379b7c07") + ex.Message; }
             finally { if (!closing) refreshModels.IsEnabled = true; }
         }
         refreshModels.Click += async (_, _) => await RefreshModelsAsync();
-        engine.SelectionChanged += async (_, _) => { aiPort.Text = engine.SelectedIndex == 0 ? "1234" : "13305"; await RefreshModelsAsync(); };
+        engine.SelectionChanged += async (_, _) => { model.Items.Clear(); aiPort.Text = engine.SelectedIndex == 0 ? "1234" : "13305"; aiPort.Visibility = engine.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible; decisionUrl.Visibility = engine.SelectedIndex == 2 ? Visibility.Visible : Visibility.Collapsed; decisionConsent.IsOn = false; decisionConsent.Visibility = engine.SelectedIndex == 2 && !DecisionService.IsLocalAddress(decisionUrl.Text) ? Visibility.Visible : Visibility.Collapsed; await RefreshModelsAsync(); };
+        aiPort.Visibility = engine.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible;
         var enabled = new CheckBox { Content = Strings.Get("Ui_cc02bd1d65c6"), IsChecked = ai.Enabled };
         var relabel = new Button { Content = Strings.Get("Ui_1c623b0d00bf") };
-        var aiPanel = new StackPanel { Spacing = 10, Children = { new TextBlock { Text = Strings.Get("Ui_a9d73061c250"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, new TextBlock { Text = Strings.Get("Ui_da5402b2a1dc"), TextWrapping = TextWrapping.Wrap }, assistantName, engine, aiPort, refreshModels, modelStatus, model, chatModel, profile, enabled, relabel } };
+        var soul = new TextBox { Text = ai.Soul ?? "", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 200 };
+        profile.Header = null; profile.Height = 200;
+        Border MarkdownCard(string title, TextBox editor)
+        {
+            var import = new Button { Content = "从文件导入", HorizontalAlignment = HorizontalAlignment.Right };
+            var heading = new Grid(); heading.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            heading.Children.Add(CardTitle(title)); Grid.SetColumn(import, 1); heading.Children.Add(import);
+            var count = new TextBlock { HorizontalAlignment = HorizontalAlignment.Right, Opacity = 0.65 };
+            void UpdateCount() => count.Text = $"{editor.Text.Length:N0} 字符 · 约 {Math.Ceiling(editor.Text.Length / 2.0):N0} tokens";
+            editor.TextChanged += (_, _) => UpdateCount(); UpdateCount();
+            import.Click += async (_, _) =>
+            {
+                try
+                {
+                    var picker = new Windows.Storage.Pickers.FileOpenPicker(); picker.FileTypeFilter.Add(".md"); picker.FileTypeFilter.Add(".txt");
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+                    var file = await picker.PickSingleFileAsync(); if (file != null) editor.Text = await Windows.Storage.FileIO.ReadTextAsync(file);
+                }
+                catch (Exception ex) { error.Text = ex.Message; }
+            };
+            return SettingsCard(heading, editor, count);
+        }
+        Grid ModelRow(string label, ComboBox service, ComboBox selectedModel)
+        {
+            service.Header = null; selectedModel.Header = null;
+            var fields = new Grid { ColumnSpacing = 10 };
+            fields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            fields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            fields.Children.Add(service); Grid.SetColumn(selectedModel, 1); fields.Children.Add(selectedModel);
+            return FieldRow(label, fields);
+        }
+        var decisionRow = ModelRow("决策模型", engine, model);
+        var chatRow = ModelRow("生成模型", chatEngine, chatModel);
+        var privacyCard = SettingsCard(remoteConsent);
+        privacyCard.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 245, 224));
+        void UpdatePrivacyCard() => privacyCard.Visibility = remoteConsent.Visibility;
+        chatEngine.SelectionChanged += (_, _) => UpdatePrivacyCard();
+        chatUrl.TextChanged += (_, _) => UpdatePrivacyCard();
+        UpdatePrivacyCard();
+        assistantName.Header = null; aiPort.Header = null; decisionUrl.Header = null; chatUrl.Header = null;
+        var decisionPortRow = FieldRow("端口", aiPort);
+        var decisionUrlRow = FieldRow("服务地址", decisionUrl);
+        var decisionKeyRow = FieldRow("Access Key", decisionKey);
+        var chatUrlFields = new Grid { ColumnSpacing = 10 };
+        chatUrlFields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        chatUrlFields.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        chatUrlFields.Children.Add(chatUrl); Grid.SetColumn(testChat, 1); chatUrlFields.Children.Add(testChat);
+        var chatUrlRow = FieldRow("服务地址", chatUrlFields);
+        var chatKeyRow = FieldRow("Access Key", chatKey);
+        void UpdateModelRows()
+        {
+            decisionPortRow.Visibility = aiPort.Visibility;
+            decisionUrlRow.Visibility = decisionUrl.Visibility;
+            decisionKeyRow.Visibility = decisionUrl.Visibility;
+            chatUrlRow.Visibility = chatUrl.Visibility;
+            chatKeyRow.Visibility = chatUrl.Visibility;
+        }
+        engine.SelectionChanged += (_, _) => UpdateModelRows();
+        chatEngine.SelectionChanged += (_, _) => UpdateModelRows();
+        UpdateModelRows();
+        var aiPanel = new StackPanel { Spacing = 16, Children = {
+            new TextBlock { Text = Strings.Get("Ui_a9d73061c250"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
+            SettingsCard(CardTitle("助手"), FieldRow(Strings.Get("AssistantName"), assistantName)),
+            SettingsCard(CardTitle("模型用途"), decisionRow, decisionPortRow, decisionUrlRow, decisionKeyRow, FieldRow("", refreshModels), modelStatus, decisionConsent, enabled, chatRow, chatUrlRow, chatKeyRow, FieldRow("", refreshChat), chatStatus),
+            privacyCard,
+            new TextBlock { Text = "人设与档案会注入每次对话。", Opacity = 0.7 }, MarkdownCard("AI 人设 Soul.md", soul), MarkdownCard("用户档案 User.md", profile), relabel } };
         var language = new ComboBox { Header = Strings.Get("GeneralLanguage"), HorizontalAlignment = HorizontalAlignment.Stretch, Items = { Strings.Get("GeneralSystemLanguage"), "简体中文", "繁體中文", "English" }, SelectedIndex = generalSettings.Language switch { "zh-CN" => 1, "zh-TW" => 2, "en-US" => 3, _ => 0 } };
-        var startup = new CheckBox { Content = Strings.Get("GeneralStartup"), IsChecked = GeneralSettings.StartupEnabled() };
-        var closeToTray = new CheckBox { Content = Strings.Get("GeneralCloseToTray"), IsChecked = generalSettings.CloseToTray };
+        var startup = new ToggleSwitch { Header = Strings.Get("GeneralStartup"), OnContent = "", OffContent = "", IsOn = GeneralSettings.StartupEnabled() };
+        var closeToTray = new ToggleSwitch { Header = Strings.Get("GeneralCloseToTray"), OnContent = "", OffContent = "", IsOn = generalSettings.CloseToTray };
+        foreach (var toggle in new[] { startup, closeToTray, decisionConsent, remoteConsent })
+        {
+            foreach (var key in new[] { "ToggleSwitchFillOn", "ToggleSwitchStrokeOn", "ToggleSwitchFillOnPointerOver", "ToggleSwitchStrokeOnPointerOver", "ToggleSwitchFillOnPressed", "ToggleSwitchStrokeOnPressed" })
+                toggle.Resources[key] = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 40, 99, 207));
+        }
+        language.Header = null;
+        Grid ToggleRow(string label, string description, ToggleSwitch toggle)
+        {
+            toggle.Header = null; toggle.OnContent = null; toggle.OffContent = null;
+            toggle.MinWidth = 0; toggle.Width = 44; toggle.HorizontalAlignment = HorizontalAlignment.Right;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toggle, label);
+            var row = new Grid { ColumnSpacing = 12 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(new StackPanel { Spacing = 4, Children = { new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap }, new TextBlock { Text = description, Opacity = 0.65, TextWrapping = TextWrapping.Wrap } } });
+            Grid.SetColumn(toggle, 1); row.Children.Add(toggle);
+            return row;
+        }
         var generalPanel = new StackPanel { Spacing = 18, Children = {
             new TextBlock { Text = Strings.Get("GeneralTitle"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
-            language, startup, closeToTray,
+            SettingsCard(CardTitle("界面"), FieldRow(Strings.Get("GeneralLanguage"), language)),
+            SettingsCard(CardTitle("启动与托盘"), ToggleRow(Strings.Get("GeneralCloseToTray"), "关闭主窗口时保留程序在系统托盘中。", closeToTray), ToggleRow(Strings.Get("GeneralStartup"), "登录 Windows 时自动启动。", startup)),
             new TextBlock { Text = Strings.Get("GeneralVersion") + "  v0.9.0_20261109" },
             new TextBlock { Text = Strings.Get("GeneralLicense") + "  MIT License" } } };
         ListViewItem SettingsNavigationItem(string label, string path)
@@ -2071,13 +2266,17 @@ public sealed partial class MainWindow : Window
         var navigationColumn = new ColumnDefinition { Width = new GridLength(MailColumn.ActualWidth > 0 ? MailColumn.ActualWidth : MailColumn.Width.Value) };
         layout.ColumnDefinitions.Add(navigationColumn);
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        layout.SizeChanged += UpdateSettingsColumn;
-        void UpdateSettingsColumn(object sender, SizeChangedEventArgs args) => navigationColumn.Width = new GridLength(MailColumn.ActualWidth);
-        layout.Children.Add(navigation);
+        layout.LayoutUpdated += (_, _) =>
+        {
+            if (MailColumn.ActualWidth > 0 && Math.Abs(navigationColumn.Width.Value - MailColumn.ActualWidth) > 0.5)
+                navigationColumn.Width = new GridLength(MailColumn.ActualWidth);
+        };
+        var navigationPane = new StackPanel { Children = { new TextBlock { Text = "设置", FontSize = 28, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(24, 24, 0, 0) }, navigation } };
+        layout.Children.Add(navigationPane);
         var scroll = new ScrollViewer { Content = generalPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
-        var save = new Button { Content = Strings.Get("Ui_fadf24dbc5a9") };
+        var save = new Button { Content = Strings.Get("Ui_fadf24dbc5a9"), MinWidth = 96, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 40, 99, 207)), Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) };
         navigation.SelectionChanged += async (_, _) => { scroll.Content = navigation.SelectedIndex == 0 ? generalPanel : navigation.SelectedIndex == 1 ? panel : aiPanel; save.Content = navigation.SelectedIndex == 1 ? Strings.Get("Ui_847fc8062342") : Strings.Get("Ui_fadf24dbc5a9"); error.Text = ""; if (navigation.SelectedIndex == 2) await RefreshModelsAsync(); };
-        var cancel = new Button { Content = Strings.Get("Ui_4d0b4688c787") };
+        var cancel = new Button { Content = Strings.Get("Ui_4d0b4688c787"), MinWidth = 96, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0), Children = { cancel, save } };
         var page = new Grid { RowSpacing = 8, Padding = new Thickness(24, 24, 24, 20) };
         page.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -2108,8 +2307,8 @@ public sealed partial class MainWindow : Window
             {
                 if (navigation.SelectedIndex == 0)
                 {
-                    var updated = new GeneralSettings(language.SelectedIndex switch { 1 => "zh-CN", 2 => "zh-TW", 3 => "en-US", _ => "system" }, closeToTray.IsChecked == true);
-                    GeneralSettings.SetStartup(startup.IsChecked == true);
+                    var updated = new GeneralSettings(language.SelectedIndex switch { 1 => "zh-CN", 2 => "zh-TW", 3 => "en-US", _ => "system" }, closeToTray.IsOn);
+                    GeneralSettings.SetStartup(startup.IsOn);
                     updated.Save();
                     bool languageChanged = updated.Language != generalSettings.Language;
                     generalSettings = updated;
@@ -2119,7 +2318,9 @@ public sealed partial class MainWindow : Window
                 if (navigation.SelectedIndex == 2)
                 {
                     if (!int.TryParse(aiPort.Text, out int aiNumber) || aiNumber < 1 || aiNumber > 65535 || (enabled.IsChecked == true && model.SelectedItem is not string)) { error.Text = Strings.Get("Ui_10118cb066b5"); return; }
-                    var settings = new AiSettings(engine.SelectedItem?.ToString() ?? "LM Studio", aiNumber, model.SelectedItem as string ?? "", enabled.IsChecked == true, profile.Text.Trim(), chatModel.SelectedItem as string ?? "", assistantName.Text.Trim());
+                    if (chatEngine.SelectedIndex == 2 && (!Uri.TryCreate(chatUrl.Text.Trim(), UriKind.Absolute, out var chatUri) || (chatUri.Scheme != "http" && chatUri.Scheme != "https"))) { error.Text = "请输入有效的 HTTP 或 HTTPS 服务地址。"; return; }
+                    if (engine.SelectedIndex == 2 && (!Uri.TryCreate(decisionUrl.Text.Trim(), UriKind.Absolute, out var decisionUri) || (decisionUri.Scheme != "http" && decisionUri.Scheme != "https"))) { error.Text = "请输入有效的决策服务地址。"; return; }
+                    var settings = new AiSettings(engine.SelectedItem?.ToString() ?? "LM Studio", aiNumber, model.SelectedItem as string ?? "", enabled.IsChecked == true, profile.Text.Trim(), chatModel.SelectedItem as string ?? "", assistantName.Text.Trim(), chatEngine.SelectedItem?.ToString() ?? "LM Studio", chatUrl.Text.Trim(), remoteConsent.IsOn, soul.Text, decisionUrl.Text.Trim(), decisionConsent.IsOn, decisionKey.Password, chatKey.Password);
                     if (settings.Enabled)
                     {
                         error.Text = Strings.Get("Ui_7f7b8e27000f");
@@ -2133,8 +2334,8 @@ public sealed partial class MainWindow : Window
                 }
                 if (string.IsNullOrWhiteSpace(address.Text) || string.IsNullOrWhiteSpace(host.Text) || string.IsNullOrWhiteSpace(secret.Password) || !int.TryParse(port.Text, out int number) || number < 1 || number > 65535) { error.Text = Strings.Get("Ui_793a10b4940d"); return; }
                 if (!int.TryParse(smtpPort.Text, out int smtpNumber) || smtpNumber < 1 || smtpNumber > 65535) { error.Text = Strings.Get("Ui_83d6267aa522"); return; }
-                var candidate = new MailAccount(address.Text.Trim(), string.IsNullOrWhiteSpace(user.Text) ? address.Text.Trim() : user.Text.Trim(), host.Text.Trim(), number, ssl.IsChecked != true, smtpHost.Text.Trim(), smtpNumber, smtpSsl.IsChecked != true);
-                error.Text = Strings.Get("Ui_0c2a21faf748"); await mail.TestAsync(candidate, secret.Password); mail.Save(candidate, secret.Password); folderInitialized = false; ShowAccount(candidate.Address); await LoadFoldersAsync(); error.Text = Strings.Get("GeneralSaved");
+                var candidate = CurrentAccount();
+                error.Text = Strings.Get("Ui_0c2a21faf748"); await mail.TestAsync(candidate, secret.Password); mail.Save(candidate, secret.Password); RefreshAccountTabs(); folderInitialized = false; ShowAccount(candidate.Address); await LoadFoldersAsync(); error.Text = Strings.Get("GeneralSaved");
             }
             catch (Exception ex) { if (!closing) error.Text = Strings.Get("Ui_a43d8b375652") + ex.Message; }
             finally { if (!closing) { save.IsEnabled = true; cancel.IsEnabled = true; } }
