@@ -1424,21 +1424,63 @@ public sealed partial class MainWindow : Window
         }
         if (name == "delete_mail")
         {
-            if (!args.TryGetProperty("id", out var idValue) || idValue.ValueKind != JsonValueKind.String || !agentMailIds.TryGetValue(idValue.GetString() ?? "", out var stored)) throw new InvalidOperationException(Strings.Get("Last_8e516be6aa62"));
-            var item = mail.GetCachedAgentMessage(stored) ?? throw new InvalidOperationException(Strings.Get("Last_5481ef8e6033"));
+            var ids = new System.Collections.Generic.List<string>();
+            bool hasId = args.TryGetProperty("id", out var idValue);
+            bool hasIds = args.TryGetProperty("ids", out var idsValue);
+            if (hasId == hasIds) throw new InvalidOperationException(Strings.Get("AgentDeleteInvalidIds"));
+            if (hasId)
+            {
+                if (idValue.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(idValue.GetString())) throw new InvalidOperationException(Strings.Get("AgentDeleteInvalidIds"));
+                ids.Add(idValue.GetString()!);
+            }
+            else
+            {
+                if (idsValue.ValueKind != JsonValueKind.Array || idsValue.GetArrayLength() is < 1 or > 50) throw new InvalidOperationException(Strings.Get("AgentDeleteInvalidIds"));
+                foreach (var value in idsValue.EnumerateArray())
+                {
+                    if (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString())) throw new InvalidOperationException(Strings.Get("AgentDeleteInvalidIds"));
+                    ids.Add(value.GetString()!);
+                }
+            }
+            var targets = new System.Collections.Generic.List<(string Id, MailItem Item)>();
+            var targetKeys = new System.Collections.Generic.HashSet<string>();
+            foreach (var id in ids.Distinct())
+            {
+                if (!agentMailIds.TryGetValue(id, out var stored)) throw new InvalidOperationException(Strings.Get("Last_8e516be6aa62"));
+                var item = mail.GetCachedAgentMessage(stored) ?? throw new InvalidOperationException(Strings.Get("Last_5481ef8e6033"));
+                if (targetKeys.Add(MailKey(item))) targets.Add((id, item));
+            }
             if (loading || preparingReply) throw new InvalidOperationException(Strings.Get("AgentDeleteBusy"));
-            var dialog = new ContentDialog { XamlRoot = AgentInput.XamlRoot, Title = Strings.Get("DeleteConfirmTitle"), Content = string.Format(Strings.Get("AgentDeleteConfirm"), item.Subject, item.Sender, item.Folder), PrimaryButtonText = Strings.Get("DeleteAction"), CloseButtonText = Strings.Get("DeleteCancel") };
+            object confirmation = targets.Count == 1
+                ? string.Format(Strings.Get("AgentDeleteConfirm"), targets[0].Item.Subject, targets[0].Item.Sender, targets[0].Item.Folder)
+                : new ScrollViewer { MaxHeight = 350, Content = new TextBlock { TextWrapping = TextWrapping.Wrap, Text = string.Format(Strings.Get("AgentDeleteBatchConfirm"), targets.Count) + "\n\n" + string.Join("\n\n", targets.Select(t => $"{t.Item.Subject}\n{t.Item.Sender} · {t.Item.Folder}")) } };
+            var dialog = new ContentDialog { XamlRoot = AgentInput.XamlRoot, Title = Strings.Get("DeleteConfirmTitle"), Content = confirmation, PrimaryButtonText = Strings.Get("DeleteAction"), CloseButtonText = Strings.Get("DeleteCancel") };
             var answer = await dialog.ShowAsync();
             token.ThrowIfCancellationRequested();
             if (answer != ContentDialogResult.Primary) return JsonSerializer.Serialize(new { success = false, cancelled = true, message = Strings.Get("AgentDeleteCancelled") }, MailAgent.ReadableJson);
-            if (loading || preparingReply || mail.GetCachedAgentMessage(stored) == null) throw new InvalidOperationException(Strings.Get("Last_5481ef8e6033"));
+            if (loading || preparingReply) throw new InvalidOperationException(Strings.Get("AgentDeleteBusy"));
             preparingReply = true;
             try
             {
-                await mail.DeleteAsync(item, token);
-                agentMailIds.Remove(idValue.GetString()!);
-                await RefreshAfterDeleteAsync(item);
-                return JsonSerializer.Serialize(new { success = true, id = idValue.GetString(), subject = item.Subject }, MailAgent.ReadableJson);
+                var results = new System.Collections.Generic.List<object>();
+                int deleted = 0;
+                foreach (var (id, item) in targets)
+                {
+                    token.ThrowIfCancellationRequested();
+                    try
+                    {
+                        if (mail.GetCachedAgentMessage(item) == null) throw new InvalidOperationException(Strings.Get("Last_5481ef8e6033"));
+                        await mail.DeleteAsync(item, token);
+                        foreach (var key in agentMailIds.Where(pair => MailKey(pair.Value) == MailKey(item)).Select(pair => pair.Key).ToArray()) agentMailIds.Remove(key);
+                        deleted++;
+                        results.Add(new { id, subject = item.Subject, success = true, error = (string?)null });
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (Exception ex) { results.Add(new { id, subject = item.Subject, success = false, error = ex.Message }); continue; }
+                    try { await RefreshAfterDeleteAsync(item); }
+                    catch (Exception ex) { if (!closing) ListStatus.Text = ex.Message; }
+                }
+                return JsonSerializer.Serialize(new { success = deleted == targets.Count, id = hasId ? targets[0].Id : null, subject = hasId ? targets[0].Item.Subject : null, deleted_count = deleted, results }, MailAgent.ReadableJson);
             }
             finally { preparingReply = false; }
         }

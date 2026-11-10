@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS attachments (account TEXT NOT NULL, folder TEXT NOT N
         cmd.CommandText = @"SELECT m.folder,m.validity,m.uid,m.sender,m.subject,m.date,m.preview,m.is_seen
 FROM messages m JOIN folders f ON f.account=m.account AND f.path=m.folder AND f.validity=m.validity
 WHERE m.account=$account AND ($folder='' OR m.folder=$folder)
+AND ($folder<>'' OR lower(trim(f.name)) NOT IN ('已删除','已刪除','trash','deleted items','deleted messages'))
 AND ($query='' OR instr(lower(m.sender),lower($query))>0 OR instr(lower(m.subject),lower($query))>0 OR instr(lower(m.preview),lower($query))>0)
 AND ($sender='' OR instr(lower(m.sender),lower($sender))>0)
 AND ($from='' OR substr(m.date,1,10)>=$from) AND ($to='' OR substr(m.date,1,10)<=$to)

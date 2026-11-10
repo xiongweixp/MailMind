@@ -325,4 +325,5 @@
 如果郵件已在已刪除資料夾中，或信箱沒有已刪除資料夾，此操作可能永久刪除郵件。</value></data>
   <data name="AgentDeleteCancelled" xml:space="preserve"><value>使用者取消了刪除郵件。</value></data>
   <data name="AgentDeleteBusy" xml:space="preserve"><value>請等待目前的信箱操作完成。</value></data>
+  <data name="AgentDeleteInvalidIds" xml:space="preserve"><value>請提供一個郵件 ID，或包含 1 至 50 個郵件 ID 的陣列。</value></data><data name="AgentDeleteBatchConfirm" xml:space="preserve"><value>確認刪除以下 {0} 封郵件？已在已刪除資料夾中或沒有可用已刪除資料夾的郵件可能會被永久刪除。</value></data>
 </root>
