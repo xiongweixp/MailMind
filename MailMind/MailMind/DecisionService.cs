@@ -59,6 +59,24 @@ public sealed class DecisionService
     {
         if (!string.IsNullOrWhiteSpace(key)) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key.Trim());
     }
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken token)
+    {
+        if (response.IsSuccessStatusCode) return;
+        var body = await response.Content.ReadAsStringAsync(token);
+        string detail = "";
+        try
+        {
+            using var json = JsonDocument.Parse(body);
+            if (json.RootElement.TryGetProperty("error", out var error))
+                detail = error.ValueKind == JsonValueKind.String ? error.GetString() ?? "" :
+                    error.ValueKind == JsonValueKind.Object && error.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String ? message.GetString() ?? "" : "";
+            else if (json.RootElement.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String)
+                detail = message.GetString() ?? "";
+        }
+        catch (JsonException) { }
+        if (detail.Length > 500) detail = detail[..500];
+        throw new HttpRequestException($"HTTP {(int)response.StatusCode} ({response.ReasonPhrase})" + (string.IsNullOrWhiteSpace(detail) ? "" : ": " + detail));
+    }
     public static string Fingerprint(AiSettings settings, MailItem item, string body)
     {
         var input = JsonSerializer.Serialize(new { version = 5, settings.Engine, settings.Port, settings.DecisionBaseUrl, settings.Model, settings.Profile, item.Sender, item.Subject, item.Date, item.Preview, body });
@@ -68,7 +86,7 @@ public sealed class DecisionService
     {
         var path = engine == "LM Studio" ? "/api/v1/models" : "/v1/models";
         using var response = await Client.GetAsync($"http://127.0.0.1:{port}{path}", token);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, token);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
         var models = json.RootElement.GetProperty(engine == "LM Studio" ? "models" : "data");
         return models.EnumerateArray().Select(m => new AiModel(m.GetProperty(engine == "LM Studio" ? "key" : "id").GetString() ?? "", m.TryGetProperty("type", out var type) ? type.GetString() ?? "llm" : "llm")).Where(m => m.Id.Length > 0).ToList();
@@ -88,7 +106,7 @@ public sealed class DecisionService
         using var request = new HttpRequestMessage(HttpMethod.Get, address.TrimEnd('/') + "/models");
         SetAuthorization(request, accessKey);
         using var response = await Client.SendAsync(request, token);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, token);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
         return json.RootElement.GetProperty("data").EnumerateArray().Select(m => new AiModel(m.GetProperty("id").GetString() ?? "", "llm")).Where(m => m.Id.Length > 0).ToList();
     }
@@ -97,7 +115,7 @@ public sealed class DecisionService
         using var request = new HttpRequestMessage(HttpMethod.Post, address.TrimEnd('/') + "/chat/completions") { Content = JsonContent.Create(new { model, messages = new[] { new { role = "user", content = "Reply OK." } }, max_tokens = 8 }) };
         SetAuthorization(request, accessKey);
         using var response = await Client.SendAsync(request, token);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, token);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
         _ = json.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
     }
@@ -110,7 +128,7 @@ public sealed class DecisionService
             using var chatRequest = new HttpRequestMessage(HttpMethod.Post, settings.DecisionBaseUrl.TrimEnd('/') + "/chat/completions") { Content = JsonContent.Create(new { model = settings.Model, messages, temperature = 0 }) };
             SetAuthorization(chatRequest, settings.DecisionAccessKey);
             using var chatResponse = await Client.SendAsync(chatRequest, token);
-            chatResponse.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(chatResponse, token);
             using var chatJson = JsonDocument.Parse(await chatResponse.Content.ReadAsStringAsync(token));
             return (chatJson.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "").Trim().Trim('"', '\'', '.', ' ' ).ToLowerInvariant();
         }

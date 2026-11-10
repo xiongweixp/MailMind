@@ -18,8 +18,8 @@ public record MailFolderInfo(string Path, string Name, int Depth, bool Selectabl
 public record MailItem(uint Uid, string Sender, string Subject, string Date, string Preview, bool? IsSeen) : System.ComponentModel.INotifyPropertyChanged
 {
     private bool bulkMode, bulkHover, bulkSelected;
-    public bool IsBulkSelected { get => bulkSelected; set { bulkSelected = value; PropertyChanged?.Invoke(this, new(nameof(IsBulkSelected))); PropertyChanged?.Invoke(this, new(nameof(BulkBackground))); } }
-    public Microsoft.UI.Xaml.Media.Brush BulkBackground => new Microsoft.UI.Xaml.Media.SolidColorBrush(bulkSelected ? Windows.UI.Color.FromArgb(255, 225, 236, 252) : Windows.UI.Color.FromArgb(0, 0, 0, 0));
+    public bool IsBulkSelected { get => bulkSelected; set { bulkSelected = value; PropertyChanged?.Invoke(this, new(nameof(IsBulkSelected))); PropertyChanged?.Invoke(this, new(nameof(BulkSelectedVisibility))); } }
+    public Microsoft.UI.Xaml.Visibility BulkSelectedVisibility => bulkSelected ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
     public void SetBulkMode(bool value) { bulkMode = value; UpdateBulkVisibility(); }
     public void SetBulkHover(bool value) { bulkHover = value; UpdateBulkVisibility(); }
     private void UpdateBulkVisibility() { PropertyChanged?.Invoke(this, new(nameof(BulkCheckVisibility))); PropertyChanged?.Invoke(this, new(nameof(MailIconVisibility))); }

@@ -2188,8 +2188,8 @@ public sealed partial class MainWindow : Window
         }
         var decisionRow = ModelRow("决策模型", engine, model);
         var chatRow = ModelRow("生成模型", chatEngine, chatModel);
-        var privacyCard = SettingsCard(remoteConsent);
-        privacyCard.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 245, 224));
+        var privacyCard = (Border)Microsoft.UI.Xaml.Markup.XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource NoteBackgroundBrush}' BorderBrush='{ThemeResource DividerBrush}' BorderThickness='1' CornerRadius='10' Padding='20'/>");
+        privacyCard.Child = remoteConsent;
         void UpdatePrivacyCard() => privacyCard.Visibility = remoteConsent.Visibility;
         chatEngine.SelectionChanged += (_, _) => UpdatePrivacyCard();
         chatUrl.TextChanged += (_, _) => UpdatePrivacyCard();
@@ -2218,7 +2218,7 @@ public sealed partial class MainWindow : Window
         var aiPanel = new StackPanel { Spacing = 16, Children = {
             new TextBlock { Text = Strings.Get("Ui_a9d73061c250"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
             SettingsCard(CardTitle("助手"), FieldRow(Strings.Get("AssistantName"), assistantName)),
-            SettingsCard(CardTitle("模型用途"), decisionRow, decisionPortRow, decisionUrlRow, decisionKeyRow, FieldRow("", refreshModels), modelStatus, decisionConsent, enabled, chatRow, chatUrlRow, chatKeyRow, FieldRow("", refreshChat), chatStatus),
+            SettingsCard(CardTitle("模型服务"), decisionRow, decisionPortRow, decisionUrlRow, decisionKeyRow, FieldRow("", refreshModels), modelStatus, decisionConsent, enabled, chatRow, chatUrlRow, chatKeyRow, FieldRow("", refreshChat), chatStatus),
             privacyCard,
             new TextBlock { Text = "人设与档案会注入每次对话。", Opacity = 0.7 }, MarkdownCard("AI 人设 Soul.md", soul), MarkdownCard("用户档案 User.md", profile), relabel } };
         var language = new ComboBox { Header = Strings.Get("GeneralLanguage"), HorizontalAlignment = HorizontalAlignment.Stretch, Items = { Strings.Get("GeneralSystemLanguage"), "简体中文", "繁體中文", "English" }, SelectedIndex = generalSettings.Language switch { "zh-CN" => 1, "zh-TW" => 2, "en-US" => 3, _ => 0 } };
