@@ -312,4 +312,17 @@
   <data name="GeneralSaved" xml:space="preserve"><value>Settings saved.</value></data>
   <data name="TrayOpen" xml:space="preserve"><value>Open MailMind</value></data>
   <data name="TrayExit" xml:space="preserve"><value>Exit</value></data>
+  <data name="AssistantName" xml:space="preserve"><value>AI assistant name</value></data>
+  <data name="AgentStop" xml:space="preserve"><value>Stop</value></data>
+  <data name="AgentStopped" xml:space="preserve"><value>Stopped.</value></data>
+  <data name="AgentSend" xml:space="preserve"><value>Send to assistant</value></data>
+  <data name="AgentDeleteConfirm" xml:space="preserve"><value>Delete this email?
+
+Subject: {0}
+From: {1}
+Folder: {2}
+
+The message may be permanently deleted if it is already in Trash or no Trash folder is available.</value></data>
+  <data name="AgentDeleteCancelled" xml:space="preserve"><value>Email deletion was cancelled by the user.</value></data>
+  <data name="AgentDeleteBusy" xml:space="preserve"><value>Please wait for the current mailbox operation to finish.</value></data>
 </root>

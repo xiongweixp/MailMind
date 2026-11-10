@@ -312,4 +312,17 @@
   <data name="GeneralSaved" xml:space="preserve"><value>设置已保存。</value></data>
   <data name="TrayOpen" xml:space="preserve"><value>打开 MailMind</value></data>
   <data name="TrayExit" xml:space="preserve"><value>退出</value></data>
+  <data name="AssistantName" xml:space="preserve"><value>AI 助手名称</value></data>
+  <data name="AgentStop" xml:space="preserve"><value>中止</value></data>
+  <data name="AgentStopped" xml:space="preserve"><value>已中止。</value></data>
+  <data name="AgentSend" xml:space="preserve"><value>发送给助手</value></data>
+  <data name="AgentDeleteConfirm" xml:space="preserve"><value>确认删除这封邮件？
+
+主题：{0}
+发件人：{1}
+文件夹：{2}
+
+如果邮件已在已删除文件夹中，或邮箱没有已删除文件夹，此操作可能永久删除邮件。</value></data>
+  <data name="AgentDeleteCancelled" xml:space="preserve"><value>用户取消了删除邮件。</value></data>
+  <data name="AgentDeleteBusy" xml:space="preserve"><value>请等待当前邮箱操作完成。</value></data>
 </root>

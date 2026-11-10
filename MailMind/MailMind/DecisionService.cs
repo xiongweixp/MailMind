@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace MailMind;
 
-public record AiSettings(string Engine = "LM Studio", int Port = 1234, string Model = "", bool Enabled = false, string Profile = "", string ChatModel = "");
+public record AiSettings(string Engine = "LM Studio", int Port = 1234, string Model = "", bool Enabled = false, string Profile = "", string ChatModel = "", string AssistantName = "");
 public record AiModel(string Id, string Type);
 
 public sealed class DecisionService

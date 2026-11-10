@@ -112,4 +112,8 @@
   <data name="FontSimSun.Content" xml:space="preserve"><value>宋体</value></data>
   <data name="FontSimHei.Content" xml:space="preserve"><value>黑体</value></data>
   <data name="FontDengXian.Content" xml:space="preserve"><value>等线</value></data>
+  <data name="NewConversationText.Text" xml:space="preserve"><value>新对话</value></data>
+  <data name="NewConversation.AutomationProperties.Name" xml:space="preserve"><value>新对话</value></data>
+  <data name="AgentAttachment.AutomationProperties.Name" xml:space="preserve"><value>附件（即将推出）</value></data>
+  <data name="AgentAttachment.ToolTipService.ToolTip" xml:space="preserve"><value>附件（即将推出）</value></data>
 </root>

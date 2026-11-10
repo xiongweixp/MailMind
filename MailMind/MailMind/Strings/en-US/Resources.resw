@@ -112,4 +112,8 @@
   <data name="FontSimSun.Content" xml:space="preserve"><value>SimSun</value></data>
   <data name="FontSimHei.Content" xml:space="preserve"><value>SimHei</value></data>
   <data name="FontDengXian.Content" xml:space="preserve"><value>DengXian</value></data>
+  <data name="NewConversationText.Text" xml:space="preserve"><value>New chat</value></data>
+  <data name="NewConversation.AutomationProperties.Name" xml:space="preserve"><value>New chat</value></data>
+  <data name="AgentAttachment.AutomationProperties.Name" xml:space="preserve"><value>Attachment (coming soon)</value></data>
+  <data name="AgentAttachment.ToolTipService.ToolTip" xml:space="preserve"><value>Attachment (coming soon)</value></data>
 </root>
