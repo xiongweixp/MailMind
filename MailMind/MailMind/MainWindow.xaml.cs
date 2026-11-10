@@ -78,6 +78,8 @@ public sealed partial class MainWindow : Window
     private Windows.Graphics.PointInt32 toolbarWindowStart;
     private readonly ObservableCollection<MailAttachment> composeAttachments = new();
     private readonly ObservableCollection<MailItem> messages = new();
+    private readonly System.Collections.Generic.Dictionary<string, MailItem> bulkSelection = new();
+    private bool bulkMode, bulkUpdating, bulkBusy;
     private readonly ObservableCollection<MailDateGroup> dateGroups = new();
     private readonly CollectionViewSource groupedMessages = new() { IsSourceGrouped = true };
     private bool aiVisible = true, loading;
@@ -559,6 +561,7 @@ public sealed partial class MainWindow : Window
     }
     private Task OpenFolderAsync(string name)
     {
+        if (folder != name && bulkMode) ExitBulkMode();
         ContactsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Collapsed;
         searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear();
         AiSearchStatusPanel.Visibility = Visibility.Collapsed;
@@ -653,6 +656,7 @@ public sealed partial class MainWindow : Window
     private void MailList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args) { }
     private async void MailList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (bulkMode) { MailList.SelectedItem = null; return; }
         if (closing || MailList.SelectedItem is not MailItem item) return;
         if (ComposeWorkspace.Visibility == Visibility.Visible) { MailList.SelectedItem = null; await ShowNotice(Strings.Get("Ui_ef40431c5873"), Strings.Get("Ui_3cb935e8e9f3")); return; }
         displayedHtml = null;
@@ -874,6 +878,88 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex) { if (!closing) ListStatus.Text = Strings.Get("Ui_d0fdba350302") + ex.Message; }
     }
+    private System.Collections.Generic.IEnumerable<MailItem> VisibleBulkItems() => dateGroups.SelectMany(g => g);
+    private void MailIcon_PointerEntered(object sender, PointerRoutedEventArgs e) { if (((FrameworkElement)sender).DataContext is MailItem item) item.SetBulkHover(true); }
+    private void MailIcon_PointerExited(object sender, PointerRoutedEventArgs e) { if (((FrameworkElement)sender).DataContext is MailItem item) item.SetBulkHover(false); }
+    private void MailCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (bulkUpdating || sender is not CheckBox box || box.DataContext is not MailItem item) return;
+        if (box.IsChecked == true)
+        {
+            if (!bulkMode)
+            {
+                bulkMode = true;
+                MailList.SelectedItem = null;
+                ReadingToolbar.Visibility = ReadingWorkspace.Visibility = PreviewWorkspace.Visibility = Visibility.Collapsed;
+                EmptyWorkspace.Visibility = Visibility.Collapsed; BulkWorkspace.Visibility = Visibility.Visible;
+                SearchToolbar.Visibility = Visibility.Collapsed; BulkToolbar.Visibility = Visibility.Visible;
+                foreach (var current in VisibleBulkItems()) current.SetBulkMode(true);
+            }
+            bulkSelection[MailKey(item)] = item;
+        }
+        else bulkSelection.Remove(MailKey(item));
+        BulkCount.Text = $"已选择 {bulkSelection.Count} 封邮件";
+        BulkHeading.Text = BulkCount.Text;
+        BulkSummary.ItemsSource = bulkSelection.Values.ToArray();
+    }
+    private void ExitBulkMode()
+    {
+        bulkUpdating = true;
+        foreach (var item in VisibleBulkItems().Concat(bulkSelection.Values).Distinct()) { item.IsBulkSelected = false; item.SetBulkMode(false); item.SetBulkHover(false); }
+        bulkSelection.Clear(); bulkMode = false; bulkUpdating = false;
+        SearchToolbar.Visibility = Visibility.Visible; BulkToolbar.Visibility = Visibility.Collapsed;
+        BulkWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Visible;
+    }
+    private void CancelBulk_Click(object sender, RoutedEventArgs e) { if (!bulkBusy) ExitBulkMode(); }
+    private async void BulkRead_Click(object sender, RoutedEventArgs e) => await RunBulkAsync("read");
+    private async void BulkUnread_Click(object sender, RoutedEventArgs e) => await RunBulkAsync("unread");
+    private async void BulkDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (bulkBusy || bulkSelection.Count == 0) return;
+        var dialog = new ContentDialog { XamlRoot = BulkToolbar.XamlRoot, Title = Strings.Get("DeleteConfirmTitle"), Content = $"确定删除所选的 {bulkSelection.Count} 封邮件吗？", PrimaryButtonText = Strings.Get("DeleteAction"), CloseButtonText = Strings.Get("DeleteCancel") };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary) await RunBulkAsync("delete");
+    }
+    private void BulkMove_Click(object sender, RoutedEventArgs e)
+    {
+        if (bulkBusy || bulkSelection.Count == 0) return;
+        var menu = new MenuFlyout();
+        foreach (var destination in mail.CachedFolders().Where(f => f.Selectable && f.Path != folder))
+        {
+            var entry = new MenuFlyoutItem { Text = Strings.FolderName(destination.Name) };
+            entry.Click += async (_, _) => await RunBulkAsync("move", destination.Path);
+            menu.Items.Add(entry);
+        }
+        if (menu.Items.Count == 0) { _ = ShowNotice("移动邮件", "没有可用的目标文件夹。"); return; }
+        menu.ShowAt(BulkMoveButton);
+    }
+    private async Task RunBulkAsync(string action, string? destination = null)
+    {
+        if (bulkBusy || bulkSelection.Count == 0) return;
+        bulkBusy = true; BulkToolbar.IsHitTestVisible = false;
+        var failures = new System.Collections.Generic.List<string>();
+        try
+        {
+            foreach (var item in bulkSelection.Values.ToArray())
+            {
+                try
+                {
+                    if (action == "delete") await mail.DeleteAsync(item, windowLifetime.Token);
+                    else if (action == "move") await mail.MoveAsync(item, destination!, windowLifetime.Token);
+                    else { bool seen = action == "read"; await mail.SetSeenAsync(item, seen, windowLifetime.Token); item.SetSeen(seen); foreach (var current in messages.Where(m => MailKey(m) == MailKey(item))) current.SetSeen(seen); }
+                    if (action is "delete" or "move") { aiResults.RemoveAll(m => MailKey(m) == MailKey(item)); var current = messages.FirstOrDefault(m => MailKey(m) == MailKey(item)); if (current != null) messages.Remove(current); }
+                    bulkSelection.Remove(MailKey(item));
+                    bulkUpdating = true; item.IsBulkSelected = false; bulkUpdating = false;
+                }
+                catch (Exception ex) { failures.Add($"{item.Subject}: {ex.Message}"); }
+            }
+            if (action is "delete" or "move") RefreshCachedList();
+            BulkCount.Text = $"已选择 {bulkSelection.Count} 封邮件";
+            BulkHeading.Text = BulkCount.Text; BulkSummary.ItemsSource = bulkSelection.Values.ToArray();
+            if (failures.Count == 0) ExitBulkMode();
+            else await ShowNotice("部分邮件操作失败", string.Join("\n", failures));
+        }
+        finally { bulkBusy = false; BulkToolbar.IsHitTestVisible = true; }
+    }
     private async Task ShowHtmlAsync(string html, MailItem item)
     {
         await HtmlView.EnsureCoreWebView2Async();
@@ -1019,6 +1105,8 @@ public sealed partial class MainWindow : Window
     }
     private void AddToDateGroup(MailItem item)
     {
+        item.SetBulkMode(bulkMode);
+        if (bulkMode) { bulkUpdating = true; item.IsBulkSelected = bulkSelection.ContainsKey(MailKey(item)); bulkUpdating = false; }
         var (order, title) = MailDateGroup.Classify(item.Date, DateTime.Today);
         MailDateGroup? group = null;
         int index = 0;

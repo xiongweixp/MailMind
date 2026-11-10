@@ -17,6 +17,14 @@ public record MailAccount(string Address, string UserName, string ImapHost, int 
 public record MailFolderInfo(string Path, string Name, int Depth, bool Selectable);
 public record MailItem(uint Uid, string Sender, string Subject, string Date, string Preview, bool? IsSeen) : System.ComponentModel.INotifyPropertyChanged
 {
+    private bool bulkMode, bulkHover, bulkSelected;
+    public bool IsBulkSelected { get => bulkSelected; set { bulkSelected = value; PropertyChanged?.Invoke(this, new(nameof(IsBulkSelected))); PropertyChanged?.Invoke(this, new(nameof(BulkBackground))); } }
+    public Microsoft.UI.Xaml.Media.Brush BulkBackground => new Microsoft.UI.Xaml.Media.SolidColorBrush(bulkSelected ? Windows.UI.Color.FromArgb(255, 225, 236, 252) : Windows.UI.Color.FromArgb(0, 0, 0, 0));
+    public void SetBulkMode(bool value) { bulkMode = value; UpdateBulkVisibility(); }
+    public void SetBulkHover(bool value) { bulkHover = value; UpdateBulkVisibility(); }
+    private void UpdateBulkVisibility() { PropertyChanged?.Invoke(this, new(nameof(BulkCheckVisibility))); PropertyChanged?.Invoke(this, new(nameof(MailIconVisibility))); }
+    public Microsoft.UI.Xaml.Visibility BulkCheckVisibility => bulkMode || bulkHover ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+    public Microsoft.UI.Xaml.Visibility MailIconVisibility => bulkMode || bulkHover ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
     public string DisplaySender => InternetAddressList.TryParse(Sender, out var addresses) && addresses.Count > 0
         ? string.Join(", ", addresses.Select(address => !string.IsNullOrWhiteSpace(address.Name) ? address.Name : address is MailboxAddress mailbox ? mailbox.Address : address.ToString()))
         : Sender;
@@ -489,6 +497,39 @@ public sealed class MailService
             await source.AddFlagsAsync(uid, MessageFlags.Deleted, true, cancellationToken);
             await source.ExpungeAsync(new[] { uid }, cancellationToken);
         }
+        cache.Remove(item);
+        if (folderName == item.Folder && validity == item.Validity) ids.Remove(uid);
+    }
+    public async Task SetSeenAsync(MailItem item, bool seen, System.Threading.CancellationToken token)
+    {
+        if (account == null || account.Address != item.Account || string.IsNullOrEmpty(password)) throw new InvalidOperationException(Strings.Get("DeleteConnectError"));
+        using var client = new ImapClient();
+        await ConnectAsync(client, account, password, token);
+        var source = await client.GetFolderAsync(item.Folder, token);
+        await source.OpenAsync(FolderAccess.ReadWrite, token);
+        if (source.Access != FolderAccess.ReadWrite) throw new InvalidOperationException(Strings.Get("MessageFolderReadOnly"));
+        if (source.UidValidity != item.Validity) throw new InvalidOperationException(Strings.Get("MessageFolderRebuilt"));
+        var uid = new UniqueId(item.Uid);
+        if (seen) await source.AddFlagsAsync(uid, MessageFlags.Seen, true, token);
+        else await source.RemoveFlagsAsync(uid, MessageFlags.Seen, true, token);
+        var result = await source.FetchAsync(new[] { uid }, MessageSummaryItems.UniqueId | MessageSummaryItems.Flags, token);
+        var flags = result.Count == 0 ? null : result[0].Flags;
+        if (!flags.HasValue || flags.GetValueOrDefault().HasFlag(MessageFlags.Seen) != seen) throw new InvalidOperationException(Strings.Get("MessageMovedOrDeleted"));
+        cache.SetSeen(item, seen);
+    }
+    public async Task MoveAsync(MailItem item, string destination, System.Threading.CancellationToken token)
+    {
+        if (account == null || account.Address != item.Account || string.IsNullOrEmpty(password)) throw new InvalidOperationException(Strings.Get("DeleteConnectError"));
+        using var client = new ImapClient();
+        await ConnectAsync(client, account, password, token);
+        var source = await client.GetFolderAsync(item.Folder, token);
+        await source.OpenAsync(FolderAccess.ReadWrite, token);
+        if (source.Access != FolderAccess.ReadWrite) throw new InvalidOperationException(Strings.Get("MessageFolderReadOnly"));
+        if (source.UidValidity != item.Validity) throw new InvalidOperationException(Strings.Get("MessageFolderRebuilt"));
+        var uid = new UniqueId(item.Uid);
+        if ((await source.FetchAsync(new[] { uid }, MessageSummaryItems.UniqueId, token)).Count == 0) throw new InvalidOperationException(Strings.Get("MessageMovedOrDeleted"));
+        if ((client.Capabilities & (ImapCapabilities.Move | ImapCapabilities.UidPlus)) == 0) throw new InvalidOperationException(Strings.Get("MessageMoveUnsupported"));
+        await source.MoveToAsync(uid, await client.GetFolderAsync(destination, token), token);
         cache.Remove(item);
         if (folderName == item.Folder && validity == item.Validity) ids.Remove(uid);
     }
