@@ -255,6 +255,7 @@ public sealed class MailService
         foreach (var batch in missing.Take(10).Chunk(10))
         {
             token.ThrowIfCancellationRequested();
+            progress?.Invoke(completed + 1, found.Count);
             Array.Sort(batch, (left, right) => left.Id.CompareTo(right.Id));
             IList<IMessageSummary> summaries;
             try { summaries = await remote.FetchAsync(batch, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.PreviewText | MessageSummaryItems.Flags | MessageSummaryItems.BodyStructure, token); }

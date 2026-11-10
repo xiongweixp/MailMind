@@ -85,6 +85,9 @@ public sealed partial class MainWindow : Window
     private bool aiVisible = true, loading;
     private bool checkingForMail, folderInitialized;
     private int activeSyncs;
+    private string? syncingFolderName;
+    private int syncCurrent, syncTotal;
+    private bool syncStatusDisplayed;
     private Storyboard? refreshAnimation;
     private readonly DispatcherTimer mailSyncTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private int total, offset;
@@ -406,9 +409,6 @@ public sealed partial class MainWindow : Window
     };
     private async Task LoadFoldersAsync()
     {
-        StartSyncAnimation();
-        try
-        {
         var cached = mail.CachedFolders();
         if (cached.Count > 0)
         {
@@ -431,8 +431,6 @@ public sealed partial class MainWindow : Window
         {
             if (!closing) ListStatus.Text = cached.Count > 0 ? Strings.Get("Ui_01cfb10ae247") + ex.Message : Strings.Get("Ui_77b89d0d2434") + ex.Message;
         }
-        }
-        finally { StopSyncAnimation(); }
     }
     private void StartSyncAnimation()
     {
@@ -455,9 +453,6 @@ public sealed partial class MainWindow : Window
         if (closing || checkingForMail || mail.Account == null) return;
         checkingForMail = true;
         mailSyncTimer.Stop();
-        StartSyncAnimation();
-        if (ListStatus.Text == string.Format(Strings.Get("CacheCount"), total))
-            ListStatus.Text = string.Format(Strings.Get("Fmt_4f922a65014e"), total);
         var account = mail.Account;
         bool moreMail = false;
         try
@@ -468,12 +463,18 @@ public sealed partial class MainWindow : Window
                 if (closing || !ReferenceEquals(mail.Account, account)) break;
                 try
                 {
+                    syncingFolderName = Strings.FolderName(entry.Name);
+                    syncCurrent = syncTotal = 0;
                     var before = entry.Name == "收件箱" ? mail.CachedSearchItems(entry.Path).Select(MailKey).ToHashSet() : null;
                     uint previousMaxUid = entry.Name == "收件箱" ? mail.CachedSearchItems(entry.Path).Select(i => i.Uid).DefaultIfEmpty().Max() : 0;
                     moreMail |= await mail.SyncFolderAsync(entry.Path, windowLifetime.Token, (current, count) =>
                     {
-                        if (!closing && ReferenceEquals(mail.Account, account) && folder == entry.Path)
-                            ListStatus.Text = string.Format(Strings.Get("SyncProgress"), total, current, count);
+                        if (!closing && ReferenceEquals(mail.Account, account))
+                        {
+                            if (!syncStatusDisplayed) StartSyncAnimation();
+                            syncCurrent = current; syncTotal = count;
+                            ShowSyncStatus();
+                        }
                     });
                     if (before != null && ReferenceEquals(mail.Account, account))
                     {
@@ -491,17 +492,32 @@ public sealed partial class MainWindow : Window
                     if (!closing && ReferenceEquals(mail.Account, account) && folder == entry.Path) RefreshCachedList();
                 }
                 catch (OperationCanceledException) when (closing) { break; }
-                catch (Exception ex) { if (!closing && folder == entry.Path) ListStatus.Text = Strings.Get("Ui_67c7dec77218") + ex.Message; }
+                catch (Exception ex) { if (!closing && folder == entry.Path) { ListStatus.Text = Strings.Get("Ui_67c7dec77218") + ex.Message; syncStatusDisplayed = false; } }
+                finally
+                {
+                    if (syncTotal > 0) StopSyncAnimation();
+                    if (!closing && syncStatusDisplayed) ListStatus.Text = string.Format(Strings.Get("CacheCount"), total);
+                    syncStatusDisplayed = false;
+                    syncingFolderName = null;
+                    syncCurrent = syncTotal = 0;
+                }
             }
         }
         finally
         {
             checkingForMail = false;
-            if (!closing && ListStatus.Text == string.Format(Strings.Get("Fmt_4f922a65014e"), total))
+            syncingFolderName = null;
+            if (!closing && syncStatusDisplayed)
                 ListStatus.Text = string.Format(Strings.Get("CacheCount"), total);
-            StopSyncAnimation();
+            syncStatusDisplayed = false;
             if (!closing) { mailSyncTimer.Interval = TimeSpan.FromSeconds(moreMail ? 1 : 30); mailSyncTimer.Start(); }
         }
+    }
+    private void ShowSyncStatus()
+    {
+        if (syncingFolderName == null || syncTotal == 0) return;
+        ListStatus.Text = string.Format(Strings.Get("SyncFolderProgress"), total, syncingFolderName, syncCurrent, syncTotal);
+        syncStatusDisplayed = true;
     }
     private async Task ScanInboxAsync(string path)
     {
@@ -600,7 +616,8 @@ public sealed partial class MainWindow : Window
         total = cached.Count; offset = visible.Count;
         if (searchDateEnd.HasValue && !aiSearchShowing) ApplySearch();
         ListEmptyText.Visibility = total == 0 ? Visibility.Visible : Visibility.Collapsed;
-        ListStatus.Text = string.Format(Strings.Get(checkingForMail ? "Fmt_4f922a65014e" : "CacheCount"), total);
+        if (checkingForMail && syncingFolderName != null && syncTotal > 0) ShowSyncStatus();
+        else ListStatus.Text = string.Format(Strings.Get("CacheCount"), total);
     }
     private async Task LoadPageAsync()
     {

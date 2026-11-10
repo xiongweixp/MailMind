@@ -245,6 +245,7 @@
   <data name="DateRangeSelected" xml:space="preserve"><value>{0:yyyy-MM-dd} to {1:yyyy-MM-dd} · Select again to start over</value></data>
   <data name="Fmt_4f922a65014e" xml:space="preserve"><value>Local cache: {0} messages · Syncing…</value></data>
   <data name="SyncProgress" xml:space="preserve"><value>Local cache: {0} messages · Syncing message {1} of {2}…</value></data>
+  <data name="SyncFolderProgress" xml:space="preserve"><value>Local cache: {0} messages · Syncing “{1}”, message {2} of {3}…</value></data>
   <data name="Fmt_682976292efe" xml:space="preserve"><value>Offline cache: {0} / {1} messages loaded. Connection failed: {2}</value></data>
   <data name="Fmt_51affa73cdfd" xml:space="preserve"><value>Loaded {0} / {1} messages</value></data>
   <data name="Fmt_512c06f73ef0" xml:space="preserve"><value>AI search · Local cache 0/{0} · 0 matches</value></data>

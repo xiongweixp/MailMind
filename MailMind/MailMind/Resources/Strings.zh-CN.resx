@@ -245,6 +245,7 @@
   <data name="DateRangeSelected" xml:space="preserve"><value>{0:yyyy-MM-dd} 至 {1:yyyy-MM-dd} · 再次点击重新选择</value></data>
   <data name="Fmt_4f922a65014e" xml:space="preserve"><value>本地缓存：{0} 封 · 正在同步…</value></data>
   <data name="SyncProgress" xml:space="preserve"><value>本地缓存：{0} 封 · 正在同步（第 {1} / {2} 封）…</value></data>
+  <data name="SyncFolderProgress" xml:space="preserve"><value>本地缓存：{0} 封 · 正在同步“{1}”（第 {2} / {3} 封）…</value></data>
   <data name="Fmt_682976292efe" xml:space="preserve"><value>离线缓存：已加载 {0} / {1} 封。连接失败：{2}</value></data>
   <data name="Fmt_51affa73cdfd" xml:space="preserve"><value>已加载 {0} / {1} 封</value></data>
   <data name="Fmt_512c06f73ef0" xml:space="preserve"><value>AI 搜索中 · 本地缓存 0/{0} · 匹配 0</value></data>
