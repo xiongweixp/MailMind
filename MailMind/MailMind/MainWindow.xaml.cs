@@ -2133,7 +2133,7 @@ public sealed partial class MainWindow : Window
             try { await Task.Delay(800, windowLifetime.Token); if (version == chatRefreshVersion && !closing) await RefreshChatAsync(version); }
             catch (OperationCanceledException) { }
         }
-        var profile = new TextBox { Header = Strings.Get("Ui_9612b1d325da"), Text = ai.Profile ?? "", PlaceholderText = Strings.Get("Ui_38ef3ea7df8d"), AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 100 };
+        var profile = new TextBox { Header = Strings.Get("Ui_9612b1d325da"), PlaceholderText = Strings.Get("Ui_38ef3ea7df8d"), AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 100, Text = DecisionService.NormalizeEditorLineEndings(ai.Profile ?? "") };
         var modelStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
         int decisionRefreshVersion = 0;
         string preferredDecisionModel = ai.Model;
@@ -2179,7 +2179,7 @@ public sealed partial class MainWindow : Window
         aiPort.Visibility = engine.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible;
         var enabled = new CheckBox { Content = Strings.Get("Ui_cc02bd1d65c6"), IsChecked = ai.Enabled };
         var relabel = new Button { Content = Strings.Get("Ui_1c623b0d00bf") };
-        var soul = new TextBox { Text = ai.Soul ?? "", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 200 };
+        var soul = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 200, Text = DecisionService.NormalizeEditorLineEndings(ai.Soul ?? "") };
         profile.Header = null; profile.Height = 200;
         Border MarkdownCard(string title, TextBox editor)
         {
@@ -2195,7 +2195,7 @@ public sealed partial class MainWindow : Window
                 {
                     var picker = new Windows.Storage.Pickers.FileOpenPicker(); picker.FileTypeFilter.Add(".md"); picker.FileTypeFilter.Add(".txt");
                     WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
-                    var file = await picker.PickSingleFileAsync(); if (file != null) editor.Text = await Windows.Storage.FileIO.ReadTextAsync(file);
+                    var file = await picker.PickSingleFileAsync(); if (file != null) editor.Text = DecisionService.NormalizeEditorLineEndings(await Windows.Storage.FileIO.ReadTextAsync(file));
                 }
                 catch (Exception ex) { error.Text = ex.Message; }
             };

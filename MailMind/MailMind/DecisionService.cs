@@ -13,7 +13,7 @@ using Windows.Security.Credentials;
 
 namespace MailMind;
 
-public record AiSettings(string Engine = "LM Studio", int Port = 1234, string Model = "", bool Enabled = false, string Profile = "", string ChatModel = "", string AssistantName = "", string ChatEngine = "", string ChatBaseUrl = "", bool AllowRemoteChat = false, string Soul = "", string DecisionBaseUrl = "", bool AllowRemoteDecision = false, [property: JsonIgnore] string DecisionAccessKey = "", [property: JsonIgnore] string ChatAccessKey = "");
+public record AiSettings(string Engine = "LM Studio", int Port = 1234, string Model = "", bool Enabled = false, string Profile = "", string ChatModel = "", string AssistantName = "", string ChatEngine = "", string ChatBaseUrl = "", bool AllowRemoteChat = false, string Soul = "", string DecisionBaseUrl = "", bool AllowRemoteDecision = false, [property: JsonIgnore] string DecisionAccessKey = "", [property: JsonIgnore] string ChatAccessKey = "", bool SoulInitialized = false, bool ProfileInitialized = false);
 public record AiModel(string Id, string Type);
 
 public sealed class DecisionService
@@ -21,7 +21,15 @@ public sealed class DecisionService
     private static readonly string PathName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailMind", "ai.json");
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(180) };
     private static readonly JsonSerializerOptions StateJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-    public AiSettings Settings { get; private set; } = new();
+    public AiSettings Settings { get; private set; } = new(Soul: ReadDefaultTemplate("Soul"), SoulInitialized: true, Profile: ReadDefaultTemplate("User"), ProfileInitialized: true);
+    private static string ReadDefaultTemplate(string name)
+    {
+        using var stream = typeof(DecisionService).Assembly.GetManifestResourceStream($"MailMind.Default{name}.md")
+            ?? throw new InvalidOperationException($"Default {name} template is missing.");
+        using var reader = new StreamReader(stream);
+        return NormalizeEditorLineEndings(reader.ReadToEnd());
+    }
+    internal static string NormalizeEditorLineEndings(string text) => text.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", "\r\n");
     private const string VaultResource = "MailMind.AI";
     private static string CredentialName(string role, string address) => role + ":" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(address.Trim().TrimEnd('/'))));
     public static string GetAccessKey(string role, string address)
@@ -46,10 +54,15 @@ public sealed class DecisionService
     {
         if (!File.Exists(PathName)) return;
         var settings = JsonSerializer.Deserialize<AiSettings>(File.ReadAllText(PathName)) ?? new();
+        if (!settings.SoulInitialized)
+            settings = settings with { Soul = string.IsNullOrWhiteSpace(settings.Soul) ? ReadDefaultTemplate("Soul") : settings.Soul, SoulInitialized = true };
+        if (!settings.ProfileInitialized)
+            settings = settings with { Profile = string.IsNullOrWhiteSpace(settings.Profile) ? ReadDefaultTemplate("User") : settings.Profile, ProfileInitialized = true };
         Settings = settings with { DecisionAccessKey = GetAccessKey("decision", settings.DecisionBaseUrl), ChatAccessKey = GetAccessKey("chat", settings.ChatBaseUrl) };
     }
     public void Save(AiSettings settings)
     {
+        settings = settings with { SoulInitialized = true, ProfileInitialized = true };
         Directory.CreateDirectory(Path.GetDirectoryName(PathName)!);
         if (settings.Engine == "自定义服务") SaveAccessKey("decision", settings.DecisionBaseUrl, settings.DecisionAccessKey);
         if (settings.ChatEngine == "自定义服务") SaveAccessKey("chat", settings.ChatBaseUrl, settings.ChatAccessKey);
