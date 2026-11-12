@@ -2088,6 +2088,7 @@ public sealed partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(ai.Model)) { model.Items.Add(ai.Model); model.SelectedItem = ai.Model; }
         if (!string.IsNullOrWhiteSpace(ai.ChatModel)) { chatModel.Items.Add(ai.ChatModel); chatModel.SelectedItem = ai.ChatModel; }
         var chatEngine = new ComboBox { Header = "生成模型服务", HorizontalAlignment = HorizontalAlignment.Stretch, Items = { "LM Studio", "Lemonade Server", "自定义服务" }, SelectedIndex = (ai.ChatEngine == "" ? ai.Engine : ai.ChatEngine) switch { "Lemonade Server" => 1, "自定义服务" => 2, _ => 0 } };
+        var chatPort = new TextBox { Text = (ai.ChatPort > 0 ? ai.ChatPort : chatEngine.SelectedIndex == 1 ? 13305 : 1234).ToString(), InputScope = new InputScope { Names = { new InputScopeName { NameValue = InputScopeNameValue.Number } } } };
         var chatUrl = new TextBox { Header = "服务地址", PlaceholderText = "http://localhost:8080/v1", Text = ai.ChatBaseUrl ?? "" };
         var chatKey = new PasswordBox { PlaceholderText = "可选 Access Key", Password = ai.ChatAccessKey ?? "" };
         var remoteConsent = new ToggleSwitch { Header = "非本机服务将接收邮件内容", OnContent = "允许", OffContent = "不允许", IsOn = ai.AllowRemoteChat };
@@ -2099,7 +2100,8 @@ public sealed partial class MainWindow : Window
             try
             {
                 if (chatModel.SelectedItem is not string selected) { chatStatus.Text = "请先选择生成模型。"; return; }
-                var candidate = ai with { ChatEngine = chatEngine.SelectedItem?.ToString() ?? "LM Studio", ChatBaseUrl = chatUrl.Text.Trim() };
+                if (chatEngine.SelectedIndex != 2 && (!int.TryParse(chatPort.Text, out int testPort) || testPort < 1 || testPort > 65535)) { chatStatus.Text = "请输入有效的生成模型端口。"; return; }
+                var candidate = ai with { ChatEngine = chatEngine.SelectedItem?.ToString() ?? "LM Studio", ChatBaseUrl = chatUrl.Text.Trim(), ChatPort = int.TryParse(chatPort.Text, out int parsedChatPort) ? parsedChatPort : 0 };
                 await decision.TestChatAsync(DecisionService.ChatBaseAddress(candidate), selected, chatEngine.SelectedIndex == 2 ? chatKey.Password : "", windowLifetime.Token);
                 chatStatus.Text = "检测成功";
             }
@@ -2109,9 +2111,10 @@ public sealed partial class MainWindow : Window
         void UpdateChatVisibility()
         {
             chatUrl.Visibility = chatEngine.SelectedIndex == 2 ? Visibility.Visible : Visibility.Collapsed;
+            chatPort.Visibility = chatEngine.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible;
             remoteConsent.Visibility = chatEngine.SelectedIndex == 2 && !DecisionService.IsLocalAddress(chatUrl.Text) ? Visibility.Visible : Visibility.Collapsed;
         }
-        chatEngine.SelectionChanged += (_, _) => { remoteConsent.IsOn = false; UpdateChatVisibility(); };
+        chatEngine.SelectionChanged += (_, _) => { if (chatEngine.SelectedIndex != 2) chatPort.Text = chatEngine.SelectedIndex == 1 ? "13305" : "1234"; remoteConsent.IsOn = false; UpdateChatVisibility(); };
         chatUrl.TextChanged += (_, _) => { chatKey.Password = ""; remoteConsent.IsOn = false; UpdateChatVisibility(); };
         UpdateChatVisibility();
         int chatRefreshVersion = 0;
@@ -2122,9 +2125,10 @@ public sealed partial class MainWindow : Window
             {
                 var service = chatEngine.SelectedItem?.ToString() ?? "LM Studio";
                 if (service == "自定义服务" && (!Uri.TryCreate(chatUrl.Text.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))) { chatStatus.Text = "请输入有效的 HTTP 或 HTTPS 服务地址。"; return; }
+                if (service != "自定义服务" && (!int.TryParse(chatPort.Text, out int port) || port < 1 || port > 65535)) { chatStatus.Text = "请输入有效的生成模型端口。"; return; }
                 var selected = preferredChatModel;
                 chatStatus.Text = "正在获取生成模型...";
-                var models = await decision.ListChatModelsAsync(service, chatUrl.Text.Trim(), chatKey.Password, windowLifetime.Token);
+                var models = await decision.ListChatModelsAsync(service, chatUrl.Text.Trim(), chatKey.Password, windowLifetime.Token, int.TryParse(chatPort.Text, out int chatPortNumber) ? chatPortNumber : 0);
                 if (closing || version != chatRefreshVersion) return;
                 chatModel.Items.Clear();
                 foreach (var entry in models) if (entry.Type is "llm" or "vlm") chatModel.Items.Add(entry.Id);
@@ -2184,6 +2188,7 @@ public sealed partial class MainWindow : Window
         decisionUrl.TextChanged += (_, _) => ScheduleDecisionRefresh();
         decisionKey.PasswordChanged += (_, _) => ScheduleDecisionRefresh();
         chatEngine.SelectionChanged += (_, _) => ScheduleChatRefresh();
+        chatPort.TextChanged += (_, _) => ScheduleChatRefresh();
         chatUrl.TextChanged += (_, _) => ScheduleChatRefresh();
         chatKey.PasswordChanged += (_, _) => ScheduleChatRefresh();
         aiPort.Visibility = engine.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible;
@@ -2239,6 +2244,7 @@ public sealed partial class MainWindow : Window
         chatUrlFields.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         chatUrlFields.Children.Add(chatUrl); Grid.SetColumn(testChat, 1); chatUrlFields.Children.Add(testChat);
         var chatUrlRow = FieldRow("服务地址", chatUrlFields);
+        var chatPortRow = FieldRow("端口", chatPort);
         var chatKeyRow = FieldRow("Access Key", chatKey);
         void UpdateModelRows()
         {
@@ -2246,6 +2252,7 @@ public sealed partial class MainWindow : Window
             decisionUrlRow.Visibility = decisionUrl.Visibility;
             decisionKeyRow.Visibility = decisionUrl.Visibility;
             chatUrlRow.Visibility = chatUrl.Visibility;
+            chatPortRow.Visibility = chatPort.Visibility;
             chatKeyRow.Visibility = chatUrl.Visibility;
         }
         engine.SelectionChanged += (_, _) => UpdateModelRows();
@@ -2254,7 +2261,7 @@ public sealed partial class MainWindow : Window
         var aiPanel = new StackPanel { Spacing = 16, Children = {
             new TextBlock { Text = Strings.Get("Ui_a9d73061c250"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
             SettingsCard(CardTitle("助手"), FieldRow(Strings.Get("AssistantName"), assistantName)),
-            SettingsCard(CardTitle("模型服务"), decisionRow, decisionPortRow, decisionUrlRow, decisionKeyRow, modelStatus, decisionConsent, enabled, chatRow, chatUrlRow, chatKeyRow, chatStatus),
+            SettingsCard(CardTitle("模型服务"), decisionRow, decisionPortRow, decisionUrlRow, decisionKeyRow, modelStatus, decisionConsent, enabled, chatRow, chatPortRow, chatUrlRow, chatKeyRow, chatStatus),
             privacyCard,
             new TextBlock { Text = "人设与档案会注入每次对话。", Opacity = 0.7 }, MarkdownCard("AI 人设 Soul.md", soul), MarkdownCard("用户档案 User.md", profile), relabel } };
         var language = new ComboBox { Header = Strings.Get("GeneralLanguage"), HorizontalAlignment = HorizontalAlignment.Stretch, Items = { Strings.Get("GeneralSystemLanguage"), "简体中文", "繁體中文", "English" }, SelectedIndex = generalSettings.Language switch { "zh-CN" => 1, "zh-TW" => 2, "en-US" => 3, _ => 0 } };
@@ -2355,8 +2362,9 @@ public sealed partial class MainWindow : Window
                 {
                     if (!int.TryParse(aiPort.Text, out int aiNumber) || aiNumber < 1 || aiNumber > 65535 || (enabled.IsChecked == true && model.SelectedItem is not string)) { error.Text = Strings.Get("Ui_10118cb066b5"); return; }
                     if (chatEngine.SelectedIndex == 2 && (!Uri.TryCreate(chatUrl.Text.Trim(), UriKind.Absolute, out var chatUri) || (chatUri.Scheme != "http" && chatUri.Scheme != "https"))) { error.Text = "请输入有效的 HTTP 或 HTTPS 服务地址。"; return; }
+                    if (chatEngine.SelectedIndex != 2 && (!int.TryParse(chatPort.Text, out int parsedPort) || parsedPort < 1 || parsedPort > 65535)) { error.Text = "请输入有效的生成模型端口。"; return; }
                     if (engine.SelectedIndex == 2 && (!Uri.TryCreate(decisionUrl.Text.Trim(), UriKind.Absolute, out var decisionUri) || (decisionUri.Scheme != "http" && decisionUri.Scheme != "https"))) { error.Text = "请输入有效的决策服务地址。"; return; }
-                    var settings = new AiSettings(engine.SelectedItem?.ToString() ?? "LM Studio", aiNumber, model.SelectedItem as string ?? "", enabled.IsChecked == true, profile.Text.Trim(), chatModel.SelectedItem as string ?? "", assistantName.Text.Trim(), chatEngine.SelectedItem?.ToString() ?? "LM Studio", chatUrl.Text.Trim(), remoteConsent.IsOn, soul.Text, decisionUrl.Text.Trim(), decisionConsent.IsOn, decisionKey.Password, chatKey.Password);
+                    var settings = new AiSettings(engine.SelectedItem?.ToString() ?? "LM Studio", aiNumber, model.SelectedItem as string ?? "", enabled.IsChecked == true, profile.Text.Trim(), chatModel.SelectedItem as string ?? "", assistantName.Text.Trim(), chatEngine.SelectedItem?.ToString() ?? "LM Studio", chatUrl.Text.Trim(), remoteConsent.IsOn, soul.Text, decisionUrl.Text.Trim(), decisionConsent.IsOn, decisionKey.Password, chatKey.Password, ChatPort: int.TryParse(chatPort.Text, out int savedChatPort) ? savedChatPort : 0);
                     if (settings.Enabled)
                     {
                         error.Text = Strings.Get("Ui_7f7b8e27000f");

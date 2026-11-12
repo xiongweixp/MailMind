@@ -13,7 +13,7 @@ using Windows.Security.Credentials;
 
 namespace MailMind;
 
-public record AiSettings(string Engine = "LM Studio", int Port = 1234, string Model = "", bool Enabled = false, string Profile = "", string ChatModel = "", string AssistantName = "", string ChatEngine = "", string ChatBaseUrl = "", bool AllowRemoteChat = false, string Soul = "", string DecisionBaseUrl = "", bool AllowRemoteDecision = false, [property: JsonIgnore] string DecisionAccessKey = "", [property: JsonIgnore] string ChatAccessKey = "", bool SoulInitialized = false, bool ProfileInitialized = false);
+public record AiSettings(string Engine = "LM Studio", int Port = 1234, string Model = "", bool Enabled = false, string Profile = "", string ChatModel = "", string AssistantName = "", string ChatEngine = "", string ChatBaseUrl = "", bool AllowRemoteChat = false, string Soul = "", string DecisionBaseUrl = "", bool AllowRemoteDecision = false, [property: JsonIgnore] string DecisionAccessKey = "", [property: JsonIgnore] string ChatAccessKey = "", bool SoulInitialized = false, bool ProfileInitialized = false, int ChatPort = 0);
 public record AiModel(string Id, string Type);
 
 public sealed class DecisionService
@@ -107,15 +107,15 @@ public sealed class DecisionService
     public static string ChatBaseAddress(AiSettings settings) => settings.ChatEngine switch
     {
         "自定义服务" => settings.ChatBaseUrl.Trim().TrimEnd('/'),
-        "LM Studio" => "http://127.0.0.1:1234/v1",
-        "Lemonade Server" => "http://127.0.0.1:13305/v1",
+        "LM Studio" => $"http://127.0.0.1:{(settings.ChatPort > 0 ? settings.ChatPort : 1234)}/v1",
+        "Lemonade Server" => $"http://127.0.0.1:{(settings.ChatPort > 0 ? settings.ChatPort : 13305)}/v1",
         _ => $"http://127.0.0.1:{settings.Port}/v1"
     };
     public static bool IsLocalAddress(string address) => Uri.TryCreate(address, UriKind.Absolute, out var uri) && uri.IsLoopback;
-    public async Task<List<AiModel>> ListChatModelsAsync(string engine, string address, string accessKey = "", CancellationToken token = default)
+    public async Task<List<AiModel>> ListChatModelsAsync(string engine, string address, string accessKey = "", CancellationToken token = default, int port = 0)
     {
-        if (engine == "LM Studio") return await ListModelsAsync(engine, 1234, token);
-        if (engine == "Lemonade Server") return await ListModelsAsync(engine, 13305, token);
+        if (engine == "LM Studio") return await ListModelsAsync(engine, port > 0 ? port : 1234, token);
+        if (engine == "Lemonade Server") return await ListModelsAsync(engine, port > 0 ? port : 13305, token);
         using var request = new HttpRequestMessage(HttpMethod.Get, address.TrimEnd('/') + "/models");
         SetAuthorization(request, accessKey);
         using var response = await Client.SendAsync(request, token);
