@@ -2082,7 +2082,6 @@ public sealed partial class MainWindow : Window
         var chatKey = new PasswordBox { PlaceholderText = "可选 Access Key", Password = ai.ChatAccessKey ?? "" };
         var remoteConsent = new ToggleSwitch { Header = "非本机服务将接收邮件内容", OnContent = "允许", OffContent = "不允许", IsOn = ai.AllowRemoteChat };
         var chatStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
-        var refreshChat = new Button { Content = "获取生成模型" };
         var testChat = new Button { Content = "检测" };
         testChat.Click += async (_, _) =>
         {
@@ -2102,41 +2101,54 @@ public sealed partial class MainWindow : Window
             chatUrl.Visibility = chatEngine.SelectedIndex == 2 ? Visibility.Visible : Visibility.Collapsed;
             remoteConsent.Visibility = chatEngine.SelectedIndex == 2 && !DecisionService.IsLocalAddress(chatUrl.Text) ? Visibility.Visible : Visibility.Collapsed;
         }
-        chatEngine.SelectionChanged += (_, _) => { chatModel.Items.Clear(); remoteConsent.IsOn = false; UpdateChatVisibility(); };
+        chatEngine.SelectionChanged += (_, _) => { remoteConsent.IsOn = false; UpdateChatVisibility(); };
         chatUrl.TextChanged += (_, _) => { chatKey.Password = ""; remoteConsent.IsOn = false; UpdateChatVisibility(); };
         UpdateChatVisibility();
-        refreshChat.Click += async (_, _) =>
+        int chatRefreshVersion = 0;
+        string preferredChatModel = ai.ChatModel;
+        async Task RefreshChatAsync(int version)
         {
-            refreshChat.IsEnabled = false;
             try
             {
                 var service = chatEngine.SelectedItem?.ToString() ?? "LM Studio";
                 if (service == "自定义服务" && (!Uri.TryCreate(chatUrl.Text.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))) { chatStatus.Text = "请输入有效的 HTTP 或 HTTPS 服务地址。"; return; }
-                var selected = chatModel.SelectedItem as string ?? ai.ChatModel;
+                var selected = preferredChatModel;
+                chatStatus.Text = "正在获取生成模型...";
                 var models = await decision.ListChatModelsAsync(service, chatUrl.Text.Trim(), chatKey.Password, windowLifetime.Token);
+                if (closing || version != chatRefreshVersion) return;
                 chatModel.Items.Clear();
                 foreach (var entry in models) if (entry.Type is "llm" or "vlm") chatModel.Items.Add(entry.Id);
                 if (chatModel.Items.Contains(selected)) chatModel.SelectedItem = selected;
                 else if (chatModel.Items.Count > 0) chatModel.SelectedIndex = 0;
                 chatStatus.Text = $"找到 {chatModel.Items.Count} 个模型";
             }
-            catch (Exception ex) { if (!closing) chatStatus.Text = ex.Message; }
-            finally { if (!closing) refreshChat.IsEnabled = true; }
-        };
+            catch (Exception ex) { if (!closing && version == chatRefreshVersion) { chatModel.Items.Clear(); chatStatus.Text = ex.Message; } }
+        }
+        async void ScheduleChatRefresh()
+        {
+            int version = ++chatRefreshVersion;
+            if (chatModel.SelectedItem is string selected) preferredChatModel = selected;
+            chatModel.Items.Clear();
+            chatStatus.Text = "等待服务配置...";
+            try { await Task.Delay(800, windowLifetime.Token); if (version == chatRefreshVersion && !closing) await RefreshChatAsync(version); }
+            catch (OperationCanceledException) { }
+        }
         var profile = new TextBox { Header = Strings.Get("Ui_9612b1d325da"), Text = ai.Profile ?? "", PlaceholderText = Strings.Get("Ui_38ef3ea7df8d"), AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 100 };
         var modelStatus = new TextBlock { TextWrapping = TextWrapping.Wrap };
-        var refreshModels = new Button { Content = Strings.Get("Ui_fa199b22e631") };
-        async Task RefreshModelsAsync()
+        int decisionRefreshVersion = 0;
+        string preferredDecisionModel = ai.Model;
+        async Task RefreshModelsAsync(int version)
         {
-            if (!int.TryParse(aiPort.Text, out int number) || number < 1 || number > 65535) { modelStatus.Text = Strings.Get("Ui_c80ff00b48ae"); return; }
-            string selectedDecision = model.SelectedItem as string ?? ai.Model;
-            string selectedChat = chatModel.SelectedItem as string ?? ai.ChatModel;
-            refreshModels.IsEnabled = false;
+            bool custom = engine.SelectedIndex == 2;
+            if (!custom && (!int.TryParse(aiPort.Text, out int portNumber) || portNumber < 1 || portNumber > 65535)) { modelStatus.Text = Strings.Get("Ui_c80ff00b48ae"); return; }
+            if (custom && (!Uri.TryCreate(decisionUrl.Text.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))) { modelStatus.Text = "请输入有效的 HTTP 或 HTTPS 服务地址。"; return; }
+            int number = int.TryParse(aiPort.Text, out int parsedPort) ? parsedPort : 1234;
+            string selectedDecision = preferredDecisionModel;
             try
             {
                 modelStatus.Text = Strings.Get("Ui_b66432e5ffb0");
                 var models = engine.SelectedIndex == 2 ? await decision.ListDecisionModelsAsync(decisionUrl.Text.Trim(), decisionKey.Password, windowLifetime.Token) : await decision.ListModelsAsync(engine.SelectedItem?.ToString() ?? "LM Studio", number, windowLifetime.Token);
-                if (closing) return;
+                if (closing || version != decisionRefreshVersion) return;
                 model.Items.Clear();
                 foreach (var entry in models)
                 {
@@ -2144,14 +2156,26 @@ public sealed partial class MainWindow : Window
                 }
                 if (model.Items.Contains(selectedDecision)) model.SelectedItem = selectedDecision;
                 else if (model.Items.Count > 0) model.SelectedIndex = 0;
-                if (chatModel.Items.Count == 0 && !string.IsNullOrWhiteSpace(selectedChat)) { chatModel.Items.Add(selectedChat); chatModel.SelectedItem = selectedChat; }
                 modelStatus.Text = string.Format(Strings.Get("Fmt_c5a7c143ddeb"), model.Items.Count, chatModel.Items.Count);
             }
-            catch (Exception ex) { if (!closing) modelStatus.Text = Strings.Get("Ui_90a2379b7c07") + ex.Message; }
-            finally { if (!closing) refreshModels.IsEnabled = true; }
+            catch (Exception ex) { if (!closing && version == decisionRefreshVersion) { model.Items.Clear(); modelStatus.Text = Strings.Get("Ui_90a2379b7c07") + ex.Message; } }
         }
-        refreshModels.Click += async (_, _) => await RefreshModelsAsync();
-        engine.SelectionChanged += async (_, _) => { model.Items.Clear(); aiPort.Text = engine.SelectedIndex == 0 ? "1234" : "13305"; aiPort.Visibility = engine.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible; decisionUrl.Visibility = engine.SelectedIndex == 2 ? Visibility.Visible : Visibility.Collapsed; decisionConsent.IsOn = false; decisionConsent.Visibility = engine.SelectedIndex == 2 && !DecisionService.IsLocalAddress(decisionUrl.Text) ? Visibility.Visible : Visibility.Collapsed; await RefreshModelsAsync(); };
+        async void ScheduleDecisionRefresh()
+        {
+            int version = ++decisionRefreshVersion;
+            if (model.SelectedItem is string selected) preferredDecisionModel = selected;
+            model.Items.Clear();
+            modelStatus.Text = "等待服务配置...";
+            try { await Task.Delay(800, windowLifetime.Token); if (version == decisionRefreshVersion && !closing) await RefreshModelsAsync(version); }
+            catch (OperationCanceledException) { }
+        }
+        engine.SelectionChanged += (_, _) => { aiPort.Text = engine.SelectedIndex == 0 ? "1234" : "13305"; aiPort.Visibility = engine.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible; decisionUrl.Visibility = engine.SelectedIndex == 2 ? Visibility.Visible : Visibility.Collapsed; decisionConsent.IsOn = false; decisionConsent.Visibility = engine.SelectedIndex == 2 && !DecisionService.IsLocalAddress(decisionUrl.Text) ? Visibility.Visible : Visibility.Collapsed; ScheduleDecisionRefresh(); };
+        aiPort.TextChanged += (_, _) => ScheduleDecisionRefresh();
+        decisionUrl.TextChanged += (_, _) => ScheduleDecisionRefresh();
+        decisionKey.PasswordChanged += (_, _) => ScheduleDecisionRefresh();
+        chatEngine.SelectionChanged += (_, _) => ScheduleChatRefresh();
+        chatUrl.TextChanged += (_, _) => ScheduleChatRefresh();
+        chatKey.PasswordChanged += (_, _) => ScheduleChatRefresh();
         aiPort.Visibility = engine.SelectedIndex == 2 ? Visibility.Collapsed : Visibility.Visible;
         var enabled = new CheckBox { Content = Strings.Get("Ui_cc02bd1d65c6"), IsChecked = ai.Enabled };
         var relabel = new Button { Content = Strings.Get("Ui_1c623b0d00bf") };
@@ -2218,7 +2242,7 @@ public sealed partial class MainWindow : Window
         var aiPanel = new StackPanel { Spacing = 16, Children = {
             new TextBlock { Text = Strings.Get("Ui_a9d73061c250"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
             SettingsCard(CardTitle("助手"), FieldRow(Strings.Get("AssistantName"), assistantName)),
-            SettingsCard(CardTitle("模型服务"), decisionRow, decisionPortRow, decisionUrlRow, decisionKeyRow, FieldRow("", refreshModels), modelStatus, decisionConsent, enabled, chatRow, chatUrlRow, chatKeyRow, FieldRow("", refreshChat), chatStatus),
+            SettingsCard(CardTitle("模型服务"), decisionRow, decisionPortRow, decisionUrlRow, decisionKeyRow, modelStatus, decisionConsent, enabled, chatRow, chatUrlRow, chatKeyRow, chatStatus),
             privacyCard,
             new TextBlock { Text = "人设与档案会注入每次对话。", Opacity = 0.7 }, MarkdownCard("AI 人设 Soul.md", soul), MarkdownCard("用户档案 User.md", profile), relabel } };
         var language = new ComboBox { Header = Strings.Get("GeneralLanguage"), HorizontalAlignment = HorizontalAlignment.Stretch, Items = { Strings.Get("GeneralSystemLanguage"), "简体中文", "繁體中文", "English" }, SelectedIndex = generalSettings.Language switch { "zh-CN" => 1, "zh-TW" => 2, "en-US" => 3, _ => 0 } };
@@ -2275,7 +2299,7 @@ public sealed partial class MainWindow : Window
         layout.Children.Add(navigationPane);
         var scroll = new ScrollViewer { Content = generalPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var save = new Button { Content = Strings.Get("Ui_fadf24dbc5a9"), MinWidth = 96, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 40, 99, 207)), Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) };
-        navigation.SelectionChanged += async (_, _) => { scroll.Content = navigation.SelectedIndex == 0 ? generalPanel : navigation.SelectedIndex == 1 ? panel : aiPanel; save.Content = navigation.SelectedIndex == 1 ? Strings.Get("Ui_847fc8062342") : Strings.Get("Ui_fadf24dbc5a9"); error.Text = ""; if (navigation.SelectedIndex == 2) await RefreshModelsAsync(); };
+        navigation.SelectionChanged += (_, _) => { scroll.Content = navigation.SelectedIndex == 0 ? generalPanel : navigation.SelectedIndex == 1 ? panel : aiPanel; save.Content = navigation.SelectedIndex == 1 ? Strings.Get("Ui_847fc8062342") : Strings.Get("Ui_fadf24dbc5a9"); error.Text = ""; if (navigation.SelectedIndex == 2) { ScheduleDecisionRefresh(); ScheduleChatRefresh(); } };
         var cancel = new Button { Content = Strings.Get("Ui_4d0b4688c787"), MinWidth = 96, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0), Children = { cancel, save } };
         var page = new Grid { RowSpacing = 8, Padding = new Thickness(24, 24, 24, 20) };
