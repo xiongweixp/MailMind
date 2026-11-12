@@ -2135,12 +2135,12 @@ public sealed partial class MainWindow : Window
             try
             {
                 modelStatus.Text = Strings.Get("Ui_b66432e5ffb0");
-                var models = engine.SelectedIndex == 2 ? await decision.ListChatModelsAsync("自定义服务", decisionUrl.Text.Trim(), decisionKey.Password, windowLifetime.Token) : await decision.ListModelsAsync(engine.SelectedItem?.ToString() ?? "LM Studio", number, windowLifetime.Token);
+                var models = engine.SelectedIndex == 2 ? await decision.ListDecisionModelsAsync(decisionUrl.Text.Trim(), decisionKey.Password, windowLifetime.Token) : await decision.ListModelsAsync(engine.SelectedItem?.ToString() ?? "LM Studio", number, windowLifetime.Token);
                 if (closing) return;
                 model.Items.Clear();
                 foreach (var entry in models)
                 {
-                    if (entry.Type == "decision" || engine.SelectedIndex == 2) model.Items.Add(entry.Id);
+                    if (entry.Type == "decision") model.Items.Add(entry.Id);
                 }
                 if (model.Items.Contains(selectedDecision)) model.SelectedItem = selectedDecision;
                 else if (model.Items.Count > 0) model.SelectedIndex = 0;

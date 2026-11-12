@@ -108,7 +108,25 @@ public sealed class DecisionService
         using var response = await Client.SendAsync(request, token);
         await EnsureSuccessAsync(response, token);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
-        return json.RootElement.GetProperty("data").EnumerateArray().Select(m => new AiModel(m.GetProperty("id").GetString() ?? "", "llm")).Where(m => m.Id.Length > 0).ToList();
+        return json.RootElement.GetProperty("data").EnumerateArray()
+            .Where(m => m.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.String
+                ? mode.GetString() is "chat" or "completion"
+                : m.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String && type.GetString() is "llm" or "vlm")
+            .Select(m => new AiModel(m.GetProperty("id").GetString() ?? "", "llm"))
+            .Where(m => m.Id.Length > 0).ToList();
+    }
+    public async Task<List<AiModel>> ListDecisionModelsAsync(string address, string accessKey = "", CancellationToken token = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, address.TrimEnd('/') + "/models");
+        SetAuthorization(request, accessKey);
+        using var response = await Client.SendAsync(request, token);
+        await EnsureSuccessAsync(response, token);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));
+        return json.RootElement.GetProperty("data").EnumerateArray()
+            .Where(m => (m.TryGetProperty("mode", out var mode) && mode.ValueKind == JsonValueKind.String && mode.GetString() == "evaluation") ||
+                        (m.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String && type.GetString() == "decision"))
+            .Select(m => new AiModel(m.GetProperty("id").GetString() ?? "", "decision"))
+            .Where(m => m.Id.Length > 0).ToList();
     }
     public async Task TestChatAsync(string address, string model, string accessKey = "", CancellationToken token = default)
     {
@@ -121,19 +139,13 @@ public sealed class DecisionService
     }
     private static async Task<string> DecideAsync(AiSettings settings, string state, string instructions, object criteria, CancellationToken token)
     {
-        if (settings.Engine == "自定义服务")
-        {
-            if (!IsLocalAddress(settings.DecisionBaseUrl) && !settings.AllowRemoteDecision) throw new InvalidOperationException("请先允许向非本机决策服务发送邮件内容。");
-            var messages = new[] { new { role = "system", content = instructions + " Return only one choice key from: " + JsonSerializer.Serialize(criteria) }, new { role = "user", content = state } };
-            using var chatRequest = new HttpRequestMessage(HttpMethod.Post, settings.DecisionBaseUrl.TrimEnd('/') + "/chat/completions") { Content = JsonContent.Create(new { model = settings.Model, messages, temperature = 0 }) };
-            SetAuthorization(chatRequest, settings.DecisionAccessKey);
-            using var chatResponse = await Client.SendAsync(chatRequest, token);
-            await EnsureSuccessAsync(chatResponse, token);
-            using var chatJson = JsonDocument.Parse(await chatResponse.Content.ReadAsStringAsync(token));
-            return (chatJson.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "").Trim().Trim('"', '\'', '.', ' ' ).ToLowerInvariant();
-        }
-        var request = new { model = settings.Model, state, questions = new { result = new { type = "choice", instructions, criteria } } };
-        using var response = await Client.PostAsJsonAsync($"http://127.0.0.1:{settings.Port}/v1/systemone", request, token);
+        bool custom = settings.Engine == "自定义服务";
+        if (custom && !IsLocalAddress(settings.DecisionBaseUrl) && !settings.AllowRemoteDecision) throw new InvalidOperationException("请先允许向非本机决策服务发送邮件内容。");
+        var payload = new { model = settings.Model, state, questions = new { result = new { type = "choice", instructions, criteria } } };
+        string address = custom ? settings.DecisionBaseUrl.TrimEnd('/') + "/systemone" : $"http://127.0.0.1:{settings.Port}/v1/systemone";
+        using var request = new HttpRequestMessage(HttpMethod.Post, address) { Content = JsonContent.Create(payload) };
+        if (custom) SetAuthorization(request, settings.DecisionAccessKey);
+        using var response = await Client.SendAsync(request, token);
         var content = await response.Content.ReadAsStringAsync(token);
         if (!response.IsSuccessStatusCode)
         {
