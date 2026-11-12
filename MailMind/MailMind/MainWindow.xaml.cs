@@ -277,6 +277,7 @@ public sealed partial class MainWindow : Window
     {
         if (closing) return;
         var settings = decision.Settings;
+        item.ImportanceError = "";
         if (!settings.Enabled) { item.Importance = ""; return; }
         item.Importance = Strings.Get("Ui_4dcbbcfa6154");
         try { await decisionQueue.WaitAsync(windowLifetime.Token); }
@@ -295,7 +296,7 @@ public sealed partial class MainWindow : Window
             if (!closing && System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item)) && decision.Settings == settings) item.Importance = result;
         }
         catch (OperationCanceledException) when (closing) { }
-        catch (Exception ex) { if (!closing && System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item))) { item.Importance = "失败"; ListStatus.Text = Strings.Get("Ui_5dabce6dc197") + ex.Message; } }
+        catch (Exception ex) { if (!closing && System.Linq.Enumerable.Any(messages, current => ReferenceEquals(current, item))) { item.ImportanceError = ex.Message; item.Importance = "失败"; ListStatus.Text = Strings.Get("Ui_5dabce6dc197") + ex.Message; } }
         finally { decisionQueue.Release(); }
     }
     private async void Contacts_Click(object sender, RoutedEventArgs e)
@@ -1991,12 +1992,21 @@ public sealed partial class MainWindow : Window
             return card;
         }
         TextBlock CardTitle(string text) => new() { Text = text, FontSize = 18, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
-        Grid FieldRow(string label, FrameworkElement field)
+        Grid FieldRow(string label, FrameworkElement field, string? help = null)
         {
             var row = new Grid { ColumnSpacing = 12 };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+            var labelContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+            labelContent.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+            if (help != null)
+            {
+                var icon = new Button { Content = "?", Width = 20, Height = 20, Padding = new Thickness(0), CornerRadius = new CornerRadius(10), FontSize = 12, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(icon, label + "说明");
+                ToolTipService.SetToolTip(icon, new ToolTip { Content = new TextBlock { Text = help, TextWrapping = TextWrapping.Wrap, MaxWidth = 320 } });
+                labelContent.Children.Add(icon);
+            }
+            row.Children.Add(labelContent);
             Grid.SetColumn(field, 1); row.Children.Add(field);
             field.HorizontalAlignment = HorizontalAlignment.Stretch;
             if (!string.IsNullOrEmpty(label)) Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(field, label);
@@ -2120,7 +2130,7 @@ public sealed partial class MainWindow : Window
                 foreach (var entry in models) if (entry.Type is "llm" or "vlm") chatModel.Items.Add(entry.Id);
                 if (chatModel.Items.Contains(selected)) chatModel.SelectedItem = selected;
                 else if (chatModel.Items.Count > 0) chatModel.SelectedIndex = 0;
-                chatStatus.Text = $"找到 {chatModel.Items.Count} 个模型";
+                chatStatus.Text = "";
             }
             catch (Exception ex) { if (!closing && version == chatRefreshVersion) { chatModel.Items.Clear(); chatStatus.Text = ex.Message; } }
         }
@@ -2156,7 +2166,7 @@ public sealed partial class MainWindow : Window
                 }
                 if (model.Items.Contains(selectedDecision)) model.SelectedItem = selectedDecision;
                 else if (model.Items.Count > 0) model.SelectedIndex = 0;
-                modelStatus.Text = string.Format(Strings.Get("Fmt_c5a7c143ddeb"), model.Items.Count, chatModel.Items.Count);
+                modelStatus.Text = "";
             }
             catch (Exception ex) { if (!closing && version == decisionRefreshVersion) { model.Items.Clear(); modelStatus.Text = Strings.Get("Ui_90a2379b7c07") + ex.Message; } }
         }
@@ -2201,17 +2211,19 @@ public sealed partial class MainWindow : Window
             };
             return SettingsCard(heading, editor, count);
         }
-        Grid ModelRow(string label, ComboBox service, ComboBox selectedModel)
+        Grid ModelRow(string label, ComboBox service, ComboBox selectedModel, string help)
         {
             service.Header = null; selectedModel.Header = null;
             var fields = new Grid { ColumnSpacing = 10 };
             fields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             fields.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             fields.Children.Add(service); Grid.SetColumn(selectedModel, 1); fields.Children.Add(selectedModel);
-            return FieldRow(label, fields);
+            return FieldRow(label, fields, help);
         }
-        var decisionRow = ModelRow("决策模型", engine, model);
-        var chatRow = ModelRow("生成模型", chatEngine, chatModel);
+        var decisionRow = ModelRow("决策模型", engine, model,
+            "用于判断邮件重要性和 AI 搜索。建议使用支持 System 1 决策接口的本地专用模型，例如 cloudflare_clef-flash；普通聊天模型不能直接替代。\n\n建议上下文长度从 8192 开始；如果服务提供 Physical Batch Size，可先设为 1024。参数在模型服务中设置，实际可用值取决于后端和硬件。");
+        var chatRow = ModelRow("生成模型", chatEngine, chatModel,
+            "用于邮件问答、总结、草拟回复和调用工具。建议使用支持中文和工具调用的本地指令模型，例如 Qwen3 14B 或 Gemma 4 12B。\n\n建议上下文长度从 8192 开始；服务支持时 Physical Batch Size 可从 1024 起试。上下文与批处理是不同设置，请根据硬件和实际效果调整。");
         var privacyCard = (Border)Microsoft.UI.Xaml.Markup.XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource NoteBackgroundBrush}' BorderBrush='{ThemeResource DividerBrush}' BorderThickness='1' CornerRadius='10' Padding='20'/>");
         privacyCard.Child = remoteConsent;
         void UpdatePrivacyCard() => privacyCard.Visibility = remoteConsent.Visibility;

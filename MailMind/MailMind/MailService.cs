@@ -39,6 +39,13 @@ public record MailItem(uint Uid, string Sender, string Subject, string Date, str
     }
     public Microsoft.UI.Xaml.Visibility AttachmentVisibility => HasAttachments == true ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
     private string importance = "";
+    private string importanceError = "";
+    public string ImportanceError
+    {
+        get => importanceError;
+        set { importanceError = value; PropertyChanged?.Invoke(this, new(nameof(ImportanceTooltip))); }
+    }
+    public string ImportanceTooltip => string.IsNullOrEmpty(importanceError) ? "AI 判断的邮件重要性" : importanceError;
     public string Importance
     {
         get => importance;
