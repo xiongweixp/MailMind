@@ -47,7 +47,7 @@ public sealed class MailAgent
         catch (UnauthorizedAccessException) { }
     }
     public static readonly JsonSerializerOptions ReadableJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
-    private static readonly Dictionary<string, string> Skills = new()
+    internal static readonly Dictionary<string, string> Skills = new()
     {
         ["compose_email"] = "打开写邮件界面并填写新草稿。arguments: {to, cc, subject, body}，均为字符串；多个地址用逗号分隔。仅使用用户提供、从当前邮件读取或通讯录查询得到且身份明确的邮箱地址，不要猜测地址。已有草稿时不要调用。",
         ["search_contacts"] = "按姓名或邮箱查询全局通讯录。arguments: {query: 字符串}，不能为空。用户以姓名指定收件人或询问联系人邮箱时先查询；结果有多个可能的人时向用户确认，不要猜测；没有结果时说明未找到。",
@@ -63,7 +63,7 @@ public sealed class MailAgent
         ["read_draft"] = "读取当前写邮件界面的收件人、抄送、主题和正文。arguments: {}。修改草稿前必须先调用。",
         ["update_draft"] = "修改当前草稿。arguments: {to?, cc?, subject?, body?}；只提供需要修改的字段，字段值必须是字符串。body 是修改后的完整正文。必须先调用 read_draft。"
     };
-    private static object[] ToolDefinitions()
+    internal static object[] ToolDefinitions()
     {
         var definitions = new Dictionary<string, (string[] Strings, string[] Integers, string[] Required)>
         {

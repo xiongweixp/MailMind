@@ -328,4 +328,9 @@ The message may be permanently deleted if it is already in Trash or no Trash fol
   <data name="AgentDeleteBusy" xml:space="preserve"><value>Please wait for the current mailbox operation to finish.</value></data>
   <data name="AgentDeleteInvalidIds" xml:space="preserve"><value>Provide either one id or an array of 1 to 50 email ids.</value></data><data name="AgentDeleteBatchConfirm" xml:space="preserve"><value>Delete these {0} emails? Messages already in Trash, or without an available Trash folder, may be permanently deleted.</value></data>
   <data name="DraftNoRecipient" xml:space="preserve"><value>(No recipient)</value></data>
+  <data name="McpConfiguration" xml:space="preserve"><value>MCP configuration</value></data>
+  <data name="McpCopy" xml:space="preserve"><value>Copy configuration</value></data>
+  <data name="McpCopied" xml:space="preserve"><value>Configuration copied.</value></data>
+  <data name="McpPathUnavailable" xml:space="preserve"><value>Unable to determine the executable path.</value></data>
+  <data name="McpDescription" xml:space="preserve"><value>Paste this configuration into a trusted local MCP client. Keep MailMind running; the client starts a separate stdio process.</value></data>
 </root>

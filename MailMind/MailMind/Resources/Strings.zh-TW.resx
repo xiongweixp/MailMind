@@ -328,4 +328,9 @@
   <data name="AgentDeleteBusy" xml:space="preserve"><value>請等待目前的信箱操作完成。</value></data>
   <data name="AgentDeleteInvalidIds" xml:space="preserve"><value>請提供一個郵件 ID，或包含 1 至 50 個郵件 ID 的陣列。</value></data><data name="AgentDeleteBatchConfirm" xml:space="preserve"><value>確認刪除以下 {0} 封郵件？已在已刪除資料夾中或沒有可用已刪除資料夾的郵件可能會被永久刪除。</value></data>
   <data name="DraftNoRecipient" xml:space="preserve"><value>(無收件人)</value></data>
+  <data name="McpConfiguration" xml:space="preserve"><value>MCP 設定</value></data>
+  <data name="McpCopy" xml:space="preserve"><value>複製設定</value></data>
+  <data name="McpCopied" xml:space="preserve"><value>設定已複製。</value></data>
+  <data name="McpPathUnavailable" xml:space="preserve"><value>無法取得程式路徑。</value></data>
+  <data name="McpDescription" xml:space="preserve"><value>將此設定貼到可信任的本機 MCP 用戶端。請保持 MailMind 執行；用戶端會啟動獨立的 stdio 行程。</value></data>
 </root>

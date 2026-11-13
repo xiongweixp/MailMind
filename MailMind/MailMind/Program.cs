@@ -12,6 +12,11 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (Array.Exists(args, arg => arg == "--mcp-stdio"))
+        {
+            McpBridge.RunStdioAsync().GetAwaiter().GetResult();
+            return;
+        }
         WinRT.ComWrappersSupport.InitializeComWrappers();
         var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
         var instance = AppInstance.FindOrRegisterForKey("MailMind");

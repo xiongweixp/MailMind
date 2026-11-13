@@ -24,6 +24,7 @@ MailMind is an email client powered by a local AI agent. It can assess email imp
 - **AI email assistant:** Summarize the selected message, identify key points and actions, search locally cached messages, read mail, and look up contacts through conversation.
 - **Writing assistance:** Create or edit drafts from your instructions, or generate a reply to the current message. Review drafts before sending; the assistant does not send mail on its own.
 - **Local AI:** Models run on your computer and MailMind calls the model service through `127.0.0.1`. You choose and control the models and runtime.
+- **MCP tools:** Connect local agents such as WorkBuddy to search mail and contacts and work with drafts through MCP over stdio.
 
 ## Configure Local AI
 
@@ -40,6 +41,27 @@ Quality and speed depend on your hardware, quantization, and model capabilities.
 2. Open **Configuration** in MailMind and go to AI settings. Select the service and enter its port (default: `1234` for LM Studio, `13305` for Lemonade Server).
 3. Refresh the model list, select a decision model and a generation model, enter a personal profile, enable AI classification, and save.
 4. If a model is missing, check that the service is running, the port and APIs are compatible, and the service recognizes the model.
+
+## Connect an MCP Agent
+
+MailMind exposes its assistant tools to local MCP clients over stdio. Start MailMind and sign in to your account, then add the following to your agent's MCP configuration (the configuration file and top-level keys depend on the client):
+
+```json
+{
+  "mcpServers": {
+    "mailmind": {
+      "command": "C:\\path\\to\\MailMind.exe",
+      "args": ["--mcp-stdio"]
+    }
+  }
+}
+```
+
+Replace `command` with the actual absolute path to `MailMind.exe`. The MCP client starts a separate stdio process, which connects to the running MailMind window through a local pipe restricted to the current Windows user. Restart the MCP service after restarting MailMind. The built-in assistant uses the same tool handler through the local pipe.
+
+Tools can search cached mail, read the selected message, manage contacts, and create or update drafts. Mail deletion requires confirmation in MailMind; sending remains a user action. Current-mail and draft tools use the state of the open window. The service can access private mail and modify contacts and drafts, so connect only trusted agents; other processes under the same Windows user can also access the pipe.
+
+When rebuilding or redeploying a debug package, stop both MailMind and any MCP client services using its executable so they release the application files. See [MCP stdio details](docs/mcp-stdio.md).
 
 ## Attachments and Email
 
@@ -62,7 +84,6 @@ Account configuration, AI settings, and the mail cache are stored under `%LOCALA
 - **Ollama support:** Add support for running local models with Ollama.
 - **Skill support:** Extend the AI assistant with skills so it can handle more tasks.
 - **System tray and notifications:** Show Windows notifications for important messages, change only the tray icon for normal messages, and leave ignorable messages silent.
-- **MCP support:** Allow agents such as WorkBuddy to operate the client and help process email through MCP.
 
 ## License
 
