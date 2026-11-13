@@ -327,4 +327,5 @@ The message may be permanently deleted if it is already in Trash or no Trash fol
   <data name="AgentDeleteCancelled" xml:space="preserve"><value>Email deletion was cancelled by the user.</value></data>
   <data name="AgentDeleteBusy" xml:space="preserve"><value>Please wait for the current mailbox operation to finish.</value></data>
   <data name="AgentDeleteInvalidIds" xml:space="preserve"><value>Provide either one id or an array of 1 to 50 email ids.</value></data><data name="AgentDeleteBatchConfirm" xml:space="preserve"><value>Delete these {0} emails? Messages already in Trash, or without an available Trash folder, may be permanently deleted.</value></data>
+  <data name="DraftNoRecipient" xml:space="preserve"><value>(No recipient)</value></data>
 </root>

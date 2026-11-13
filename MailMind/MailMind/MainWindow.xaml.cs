@@ -17,6 +17,101 @@ namespace MailMind;
 
 public sealed partial class MainWindow : Window
 {
+    public record SavedAttachment(string Name, string ContentType, byte[] Data);
+    public record SavedDraft(string Id, string Account, string To, string Cc, string Subject, string Html, ReplyDraft? Reply, SavedAttachment[] Attachments, DateTimeOffset Updated)
+    {
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string Title => string.IsNullOrWhiteSpace(Subject) ? Strings.Get("More_dd6026e30d48") : Subject;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string DisplayTo => string.IsNullOrWhiteSpace(To) ? Strings.Get("DraftNoRecipient") : To;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string Preview
+        {
+            get
+            {
+                string text = HtmlTextExtractor.Extract(Html ?? "").Trim();
+                return string.IsNullOrWhiteSpace(text) ? Strings.Get("More_38ca211767ce") : text;
+            }
+        }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public Visibility AttachmentVisibility => Attachments?.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string UpdatedLabel => Updated.ToLocalTime().ToString("g");
+    }
+    private static readonly string DraftDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MailMind", "Drafts");
+    private readonly ObservableCollection<SavedDraft> drafts = new();
+    private string? currentDraftId;
+    private bool changingDraft;
+
+    private void RefreshDrafts()
+    {
+        drafts.Clear();
+        if (!Directory.Exists(DraftDirectory)) return;
+        foreach (var path in Directory.GetFiles(DraftDirectory, "*.json").OrderByDescending(File.GetLastWriteTimeUtc))
+        {
+            try { var draft = JsonSerializer.Deserialize<SavedDraft>(File.ReadAllText(path)); if (draft != null) drafts.Add(draft); }
+            catch (Exception) { }
+        }
+    }
+    private async Task SaveCurrentDraftAsync()
+    {
+        if (!composeReady) throw new InvalidOperationException("写信编辑器尚未准备好。");
+        var draft = new SavedDraft(currentDraftId ?? Guid.NewGuid().ToString("N"), FromBox.SelectedItem as string ?? "", ToBox.Text, CcBox.Text, SubjectBox.Text, await EditorValueAsync("document.body.innerHTML"), replyDraft, composeAttachments.Select(a => new SavedAttachment(a.Name, a.ContentType, a.Data)).ToArray(), DateTimeOffset.Now);
+        Directory.CreateDirectory(DraftDirectory);
+        string path = Path.Combine(DraftDirectory, draft.Id + ".json");
+        string temp = path + ".tmp";
+        await File.WriteAllTextAsync(temp, JsonSerializer.Serialize(draft));
+        File.Move(temp, path, true);
+        currentDraftId = draft.Id;
+        RefreshDrafts();
+    }
+    private void DeleteCurrentDraft()
+    {
+        if (currentDraftId == null) return;
+        File.Delete(Path.Combine(DraftDirectory, currentDraftId + ".json"));
+        currentDraftId = null;
+        RefreshDrafts();
+    }
+    private async void SaveDraft_Click(object sender, RoutedEventArgs e)
+    {
+        if (sending) return;
+        try { await SaveCurrentDraftAsync(); await ClearComposeAsync(); }
+        catch (Exception ex) { await ShowNotice("保存草稿失败", ex.Message); }
+    }
+    private async void Drafts_Click(object sender, RoutedEventArgs e)
+    {
+        if (sending || preparingReply) return;
+        try
+        {
+            if (ComposeWorkspace.Visibility == Visibility.Visible) { await SaveCurrentDraftAsync(); await ClearComposeAsync(); }
+            ContactsView.Visibility = SettingsView.Visibility = Visibility.Collapsed;
+            DraftsView.Visibility = Visibility.Visible;
+            DraftsList.ItemsSource = drafts;
+            RefreshDrafts(); UpdateFolderSelection(folder);
+        }
+        catch (Exception ex) { await ShowNotice("保存草稿失败", ex.Message); }
+    }
+    private async void DraftsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (changingDraft || DraftsList.SelectedItem is not SavedDraft draft) return;
+        changingDraft = true;
+        try
+        {
+            if (ComposeWorkspace.Visibility == Visibility.Visible) await SaveCurrentDraftAsync();
+            await ClearComposeAsync();
+            await OpenComposeAsync();
+            if (!composeReady) return;
+            currentDraftId = draft.Id;
+            ToBox.Text = draft.To; CcBox.Text = draft.Cc; SubjectBox.Text = draft.Subject;
+            if (!string.IsNullOrEmpty(draft.Account) && !string.Equals(mail.Account?.Address, draft.Account, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("此草稿属于其他邮箱，请先切换到对应邮箱。");
+            replyDraft = draft.Reply;
+            foreach (var attachment in draft.Attachments ?? Array.Empty<SavedAttachment>()) composeAttachments.Add(new MailAttachment(attachment.Name, attachment.ContentType, attachment.Data));
+            await BodyBox.CoreWebView2.ExecuteScriptAsync($"document.body.innerHTML = {JsonSerializer.Serialize(draft.Html)};");
+        }
+        catch (Exception ex) { await ShowNotice("打开草稿失败", ex.Message); await ClearComposeAsync(); }
+        finally { changingDraft = false; }
+    }
     private readonly MailService mail = new();
     private readonly DecisionService decision = new();
     private readonly MailAgent agent = new();
@@ -302,7 +397,7 @@ public sealed partial class MainWindow : Window
     private async void Contacts_Click(object sender, RoutedEventArgs e)
     {
         if (ComposeWorkspace.Visibility == Visibility.Visible) { await ShowNotice(Strings.Get("Ui_ef40431c5873"), Strings.Get("Ui_9b64d64a01dd")); return; }
-        SettingsView.Visibility = Visibility.Collapsed; ContactsView.Visibility = Visibility.Visible; ContactsView.Refresh(); UpdateFolderSelection(folder);
+        DraftsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Collapsed; ContactsView.Visibility = Visibility.Visible; ContactsView.Refresh(); UpdateFolderSelection(folder);
     }
     private async Task OpenContactMailAsync(ContactsPane.RecentMail message)
     {
@@ -342,10 +437,11 @@ public sealed partial class MainWindow : Window
         bool dark = ((FrameworkElement)Content).ActualTheme == ElementTheme.Dark;
         foreach (var (path, button) in folderButtons)
         {
-            bool selected = ContactsView.Visibility != Visibility.Visible && SettingsView.Visibility != Visibility.Visible && path == name;
+            bool selected = DraftsView.Visibility != Visibility.Visible && ContactsView.Visibility != Visibility.Visible && SettingsView.Visibility != Visibility.Visible && path == name;
             button.Background = new SolidColorBrush(selected ? (dark ? Windows.UI.Color.FromArgb(255, 43, 68, 98) : Windows.UI.Color.FromArgb(255, 225, 235, 252)) : Microsoft.UI.Colors.Transparent);
             button.Foreground = new SolidColorBrush(selected ? (dark ? Windows.UI.Color.FromArgb(255, 173, 207, 255) : Windows.UI.Color.FromArgb(255, 27, 82, 181)) : (dark ? Windows.UI.Color.FromArgb(255, 242, 243, 245) : Windows.UI.Color.FromArgb(255, 23, 35, 58)));
         }
+        DraftsButton.Background = new SolidColorBrush(DraftsView.Visibility == Visibility.Visible ? (dark ? Windows.UI.Color.FromArgb(255, 43, 68, 98) : Windows.UI.Color.FromArgb(255, 225, 235, 252)) : Microsoft.UI.Colors.Transparent);
         bool contactsSelected = ContactsView.Visibility == Visibility.Visible;
         ContactsButton.Background = new SolidColorBrush(contactsSelected ? (dark ? Windows.UI.Color.FromArgb(255, 43, 68, 98) : Windows.UI.Color.FromArgb(255, 225, 235, 252)) : Microsoft.UI.Colors.Transparent);
         SettingsButton.Background = new SolidColorBrush(SettingsView.Visibility == Visibility.Visible ? (dark ? Windows.UI.Color.FromArgb(255, 43, 68, 98) : Windows.UI.Color.FromArgb(255, 225, 235, 252)) : Microsoft.UI.Colors.Transparent);
@@ -579,7 +675,7 @@ public sealed partial class MainWindow : Window
     private Task OpenFolderAsync(string name)
     {
         if (folder != name && bulkMode) ExitBulkMode();
-        ContactsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Collapsed;
+        ContactsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Collapsed; DraftsView.Visibility = Visibility.Collapsed;
         searchCancellation?.Cancel(); searchCancellation = null; aiSearchShowing = false; aiResults.Clear();
         AiSearchStatusPanel.Visibility = Visibility.Collapsed;
         bool changed = folder != name || !folderInitialized;
@@ -1700,6 +1796,7 @@ public sealed partial class MainWindow : Window
     }
     private async Task OpenComposeAsync()
     {
+        MailList.SelectedItem = null;
         systemPreview?.Close(); previewAttachment = null; PreviewWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Collapsed; ReadingWorkspace.Visibility = Visibility.Collapsed; ReadingToolbar.Visibility = Visibility.Collapsed;
         FromBox.Items.Clear(); if (mail.Account != null) { FromBox.Items.Add(mail.Account.Address); FromBox.SelectedIndex = 0; }
         ComposeWorkspace.Visibility = Visibility.Visible;
@@ -1834,16 +1931,18 @@ public sealed partial class MainWindow : Window
             var dialog = new ContentDialog { XamlRoot = ComposeWorkspace.XamlRoot, Title = Strings.Get("Ui_0efdb1f0b8f3"), Content = Strings.Get("Ui_f4694e9308ee"), PrimaryButtonText = Strings.Get("Ui_3a481bc7646e"), CloseButtonText = Strings.Get("Ui_ea4899468cae") };
             if (await dialog.ShowAsync() == ContentDialogResult.Primary) return;
         }
+        try { DeleteCurrentDraft(); } catch (Exception ex) { await ShowNotice("删除草稿失败", ex.Message); return; }
         await ClearComposeAsync();
     }
     private async Task ClearComposeAsync(bool closeWorkspace = true)
     {
         AgentSendConfirmation.Visibility = Visibility.Collapsed;
+        currentDraftId = null;
         replyDraft = null;
         composeAttachments.Clear();
         ToBox.Text = CcBox.Text = SubjectBox.Text = "";
         if (composeReady) await BodyBox.CoreWebView2.ExecuteScriptAsync("document.body.innerHTML = ''; ");
-        if (closeWorkspace) { ComposeWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Visible; }
+        if (closeWorkspace) { MailList.SelectedItem = null; ComposeWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Visible; }
     }
     private async void FormatBold_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("bold");
     private async void FontBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1952,6 +2051,7 @@ public sealed partial class MainWindow : Window
         AgentSendConfirmation.Visibility = Visibility.Collapsed;
         sending = true;
         int statusVersion = ++sendStatusVersion;
+        MailList.SelectedItem = null;
         ComposeWorkspace.Visibility = Visibility.Collapsed;
         EmptyWorkspace.Visibility = Visibility.Visible;
         SendStatusText.Text = Strings.Get("Ui_4d6e7909477a");
@@ -1965,6 +2065,7 @@ public sealed partial class MainWindow : Window
             string text = await EditorValueAsync("document.body.innerText");
             await mail.SendAsync(FromBox.SelectedItem as string ?? "", ToBox.Text, CcBox.Text, SubjectBox.Text, "<!doctype html><html><body>" + html + "</body></html>", text, windowLifetime.Token, replyDraft, composeAttachments);
             accepted = true;
+            DeleteCurrentDraft();
             await ClearComposeAsync(false);
             SendStatusText.Text = Strings.Get("Ui_0c7c05ad53d5");
         }
@@ -1982,7 +2083,7 @@ public sealed partial class MainWindow : Window
     }    private async void Settings_Click(object sender, RoutedEventArgs e)
     {
         if (ComposeWorkspace.Visibility == Visibility.Visible) { await ShowNotice(Strings.Get("Ui_ef40431c5873"), Strings.Get("Ui_9b64d64a01dd")); return; }
-        ContactsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Visible; UpdateFolderSelection(folder);
+        DraftsView.Visibility = Visibility.Collapsed; ContactsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Visible; UpdateFolderSelection(folder);
         Border SettingsCard(params UIElement[] children)
         {
             var contents = new StackPanel { Spacing = 12 };

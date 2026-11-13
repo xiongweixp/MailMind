@@ -327,4 +327,5 @@
   <data name="AgentDeleteCancelled" xml:space="preserve"><value>用户取消了删除邮件。</value></data>
   <data name="AgentDeleteBusy" xml:space="preserve"><value>请等待当前邮箱操作完成。</value></data>
   <data name="AgentDeleteInvalidIds" xml:space="preserve"><value>请提供一个邮件 ID，或包含 1 至 50 个邮件 ID 的数组。</value></data><data name="AgentDeleteBatchConfirm" xml:space="preserve"><value>确认删除以下 {0} 封邮件？已在已删除文件夹中或没有可用已删除文件夹的邮件可能会被永久删除。</value></data>
+  <data name="DraftNoRecipient" xml:space="preserve"><value>(无收件人)</value></data>
 </root>
