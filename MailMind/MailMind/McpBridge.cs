@@ -91,7 +91,7 @@ internal static class McpBridge
                 var root = request.RootElement;
                 if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("method", out var method) && method.ValueKind == JsonValueKind.String && method.GetString() == "tools/call" &&
                     root.TryGetProperty("params", out var parameters) && parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String &&
-                    name.GetString() is "compose_email" or "update_draft" && GetNamedPipeServerProcessId(pipe.SafePipeHandle, out uint processId))
+                    name.GetString() is "compose_email" or "update_draft" or "add_attachment" && GetNamedPipeServerProcessId(pipe.SafePipeHandle, out uint processId))
                     AllowSetForegroundWindow(processId);
             }
             catch (JsonException) { }

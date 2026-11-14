@@ -116,6 +116,8 @@ public sealed partial class MainWindow : Window
     private readonly DecisionService decision = new();
     private readonly MailAgent agent = new();
     private readonly System.Collections.Generic.List<AgentMessage> agentHistory = new();
+    private readonly System.Collections.Generic.Dictionary<string, MailAttachment> agentFiles = new();
+    private readonly System.Collections.Generic.List<string> pendingAgentFiles = new();
     private readonly System.Collections.Generic.Dictionary<string, MailItem> agentMailIds = new();
     private record DraftSnapshot(string To, string Cc, string Subject, string Html);
     private DraftSnapshot? agentDraftSnapshot;
@@ -165,6 +167,12 @@ public sealed partial class MainWindow : Window
     private static extern bool ShowWindow(nint hwnd, int command);
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(nint hwnd);
+    [DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FlashWindowInfo { public uint Size; public nint Window; public uint Flags; public uint Count; public uint Timeout; }
+    [DllImport("user32.dll")]
+    private static extern bool FlashWindowEx(ref FlashWindowInfo info);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern uint RegisterWindowMessage(string name);
     private static readonly uint TaskbarCreated = RegisterWindowMessage("TaskbarCreated");
@@ -1379,6 +1387,7 @@ public sealed partial class MainWindow : Window
     private void NewConversation_Click(object sender, RoutedEventArgs e)
     {
         agentHistory.Clear();
+        agentFiles.Clear(); pendingAgentFiles.Clear(); AgentAttachments.Children.Clear();
         agentMailIds.Clear();
         agentMessageViews.Clear();
         AgentMessages.Children.Clear();
@@ -1425,7 +1434,10 @@ public sealed partial class MainWindow : Window
     {
         if (agentCancellation != null) { agentCancellation.Cancel(); AgentSendButton.IsEnabled = false; return; }
         string input = AgentInput.Text.Trim();
-        if (input.Length == 0) return;
+        if (input.Length == 0 && pendingAgentFiles.Count == 0) return;
+        string files = string.Join("\n", pendingAgentFiles.Select(id => $"- {agentFiles[id].Name} (file_id: {id})"));
+        if (files.Length > 0) input += "\n\n用户上传的文件：\n" + files;
+        pendingAgentFiles.Clear(); AgentAttachments.Children.Clear();
         using var cancellation = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(windowLifetime.Token);
         agentCancellation = cancellation;
         SetAgentBusy(true);
@@ -1461,7 +1473,8 @@ public sealed partial class MainWindow : Window
             {
                 SetAgentThinking(responseView, false);
                 agentCancellation = null; SetAgentBusy(false);
-                if (agentDraftModified && ComposeWorkspace.Visibility == Visibility.Visible && string.IsNullOrWhiteSpace(AgentInput.Text))
+                if (agentDraftModified && ComposeWorkspace.Visibility == Visibility.Visible && string.IsNullOrWhiteSpace(AgentInput.Text) &&
+                    !string.IsNullOrWhiteSpace(SubjectBox.Text) && !string.IsNullOrWhiteSpace(await EditorValueAsync("document.body.innerText")))
                     AgentSendConfirmation.Visibility = Visibility.Visible;
             }
         }
@@ -1482,9 +1495,69 @@ public sealed partial class MainWindow : Window
             throw new InvalidOperationException(Strings.Get("Ui_571ef1449bd3"));
         return new DraftSnapshot(ToBox.Text, CcBox.Text, SubjectBox.Text, await EditorValueAsync("document.body.innerHTML"));
     }
+    private async void AgentAttachment_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker(); picker.FileTypeFilter.Add("*");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            foreach (var file in await picker.PickMultipleFilesAsync())
+            {
+                var properties = await file.GetBasicPropertiesAsync();
+                if (properties.Size > 20 * 1024 * 1024) throw new InvalidOperationException("单个文件不能超过 20 MB。");
+                var buffer = await Windows.Storage.FileIO.ReadBufferAsync(file);
+                Windows.Security.Cryptography.CryptographicBuffer.CopyToByteArray(buffer, out byte[] data);
+                string id = Guid.NewGuid().ToString("N");
+                agentFiles[id] = new MailAttachment(file.Name, file.ContentType, data); pendingAgentFiles.Add(id);
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                row.Children.Add(new TextBlock { Text = file.Name, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 200, VerticalAlignment = VerticalAlignment.Center });
+                var remove = new Button { Content = "×", Padding = new Thickness(4, 0, 4, 0), MinWidth = 0, MinHeight = 0, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0) };
+                var capsule = new Border { CornerRadius = new CornerRadius(16), Padding = new Thickness(10, 4, 6, 4), BorderThickness = new Thickness(1), HorizontalAlignment = HorizontalAlignment.Left, Child = row };
+                void UpdateCapsuleTheme()
+                {
+                    bool dark = AgentInput.ActualTheme == ElementTheme.Dark;
+                    capsule.Background = new SolidColorBrush(dark ? Windows.UI.Color.FromArgb(255, 48, 62, 80) : Windows.UI.Color.FromArgb(255, 238, 244, 255));
+                    capsule.BorderBrush = new SolidColorBrush(dark ? Windows.UI.Color.FromArgb(255, 69, 85, 105) : Windows.UI.Color.FromArgb(255, 204, 217, 238));
+                }
+                UpdateCapsuleTheme();
+                capsule.ActualThemeChanged += (_, _) => UpdateCapsuleTheme();
+                remove.Click += (_, _) => { pendingAgentFiles.Remove(id); agentFiles.Remove(id); AgentAttachments.Children.Remove(capsule); };
+                row.Children.Add(remove); AgentAttachments.Children.Add(capsule);
+            }
+        }
+        catch (Exception ex) { await ShowNotice("添加文件失败", ex.Message); }
+    }
+    private async Task<MailAttachment> ResolveAgentFileAsync(JsonElement args, System.Threading.CancellationToken token)
+    {
+        string id = args.TryGetProperty("file_id", out var i) && i.ValueKind == JsonValueKind.String ? i.GetString() ?? "" : "";
+        string path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() ?? "" : "";
+        if (string.IsNullOrWhiteSpace(id) == string.IsNullOrWhiteSpace(path)) throw new InvalidOperationException("请提供 file_id 或 path，且只能提供一个。");
+        if (id.Length > 0) return agentFiles.TryGetValue(id, out var file) ? file : throw new InvalidOperationException("找不到上传的文件。");
+        if (!Path.IsPathFullyQualified(path)) throw new InvalidOperationException("文件路径必须是绝对路径。");
+        var info = new FileInfo(path);
+        if (!info.Exists || info.Length > 20 * 1024 * 1024) throw new InvalidOperationException("文件不存在或超过 20 MB。");
+        byte[] data = await File.ReadAllBytesAsync(path, token);
+        if (data.Length > 20 * 1024 * 1024) throw new InvalidOperationException("文件超过 20 MB。");
+        return new MailAttachment(info.Name, "application/octet-stream", data);
+    }
     private async Task<string> ExecuteAgentToolAsync(string name, JsonElement args, System.Threading.CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        if (name == "read_file" || name == "add_attachment")
+        {
+            var file = await ResolveAgentFileAsync(args, token);
+            if (name == "add_attachment")
+            {
+                await GetDraftSnapshotAsync();
+                composeAttachments.Add(file); agentDraftModified = true; bool foreground = ShowAgentDraft();
+                return JsonSerializer.Serialize(new { success = true, name = file.Name, foreground });
+            }
+            string text = AgentFileReader.Read(file.Name, file.Data);
+            int offset = AgentOffset(args);
+            if (offset > text.Length) throw new InvalidOperationException("文件偏移超出范围。");
+            int length = Math.Min(12000, text.Length - offset);
+            return JsonSerializer.Serialize(new { success = true, name = file.Name, offset, content = text.Substring(offset, length), next_offset = offset + length < text.Length ? (int?)(offset + length) : null }, MailAgent.ReadableJson);
+        }
         if (name == "read_current_email") return await ReadCurrentEmailForAgentAsync(token);
         if (name == "read_draft")
         {
@@ -1636,10 +1709,12 @@ public sealed partial class MainWindow : Window
         if (name == "compose_email")
         {
             var draft = args.Deserialize<ComposeSkillArguments>() ?? throw new InvalidOperationException(Strings.Get("Last_4edc0a66e484"));
+            if (new[] { draft.to, draft.cc, draft.subject, draft.body }.Any(value => value != null && (value.Contains("<|", StringComparison.Ordinal) || value.Contains("|>", StringComparison.Ordinal))))
+                throw new InvalidOperationException("草稿包含无效的模型标记，请重新生成。");
             await ApplyAgentDraftAsync(draft);
             agentDraftModified = true;
-            ShowAgentDraft();
-            return JsonSerializer.Serialize(new { success = true, result = Strings.Get("Last_11e1a4a971e3") });
+            bool foreground = ShowAgentDraft();
+            return JsonSerializer.Serialize(new { success = true, result = Strings.Get("Last_11e1a4a971e3"), foreground, to = ToBox.Text, cc = CcBox.Text, subject = SubjectBox.Text, body = await EditorValueAsync("document.body.innerText") });
         }
         if (name == "update_draft")
         {
@@ -1660,18 +1735,25 @@ public sealed partial class MainWindow : Window
             if (subject != null) SubjectBox.Text = subject;
             agentDraftSnapshot = null;
             agentDraftModified = true;
-            ShowAgentDraft();
-            return JsonSerializer.Serialize(new { success = true, result = Strings.Get("Last_817cb148037c") });
+            bool foreground = ShowAgentDraft();
+            return JsonSerializer.Serialize(new { success = true, result = Strings.Get("Last_817cb148037c"), foreground });
         }
         throw new InvalidOperationException(Strings.Get("Last_0861906163bd"));
     }
-    private void ShowAgentDraft()
+    private bool ShowAgentDraft()
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         AppWindow.Show();
         if (IsIconic(hwnd)) ShowWindow(hwnd, 9);
         Activate();
         SetForegroundWindow(hwnd);
+        bool foreground = GetForegroundWindow() == hwnd;
+        if (!foreground)
+        {
+            var info = new FlashWindowInfo { Size = (uint)Marshal.SizeOf<FlashWindowInfo>(), Window = hwnd, Flags = 3, Count = 3 };
+            FlashWindowEx(ref info);
+        }
+        return foreground;
     }
     private static int AgentOffset(JsonElement args)
     {
