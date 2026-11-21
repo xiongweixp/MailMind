@@ -27,6 +27,7 @@ public sealed class ContactsPane : Grid
     private uint resizePointerId;
     private double resizeStartX, resizeStartWidth;
     public event Action? ContactListWidthChanged;
+    public Grid Header { get; } = new() { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), Padding = new Thickness(18), ColumnSpacing = 16 };
     public double ContactListWidth { get => contactListColumn.Width.Value; set => contactListColumn.Width = new GridLength(Math.Clamp(value, 220, 800)); }
     private static readonly int[] InitialStarts = { -20319, -20284, -19776, -19219, -18711, -18527, -18240, -17923, -17418, -16475, -16213, -15641, -15166, -14923, -14915, -14631, -14150, -14091, -13319, -12839, -12557, -11848, -11056 };
     private static readonly Encoding PinyinEncoding = CreatePinyinEncoding();
@@ -48,7 +49,7 @@ public sealed class ContactsPane : Grid
         shell.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         shell.RowDefinitions.Add(new RowDefinition());
         SetColumnSpan(shell, 2); Children.Add(shell);
-        var top = new Grid { Padding = new Thickness(18, 18, 18, 18), ColumnSpacing = 16 };
+        var top = Header;
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         top.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         top.Children.Add(new TextBlock { Text = Strings.Get("Contact_9070cb0eb695"), FontSize = 28, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });

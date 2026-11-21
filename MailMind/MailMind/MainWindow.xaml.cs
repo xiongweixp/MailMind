@@ -238,10 +238,10 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragRegion);
         ReadingToolbar.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        ReadingToolbar.PointerPressed += ReadingToolbar_PointerPressed;
-        ReadingToolbar.PointerMoved += ReadingToolbar_PointerMoved;
-        ReadingToolbar.PointerReleased += ReadingToolbar_PointerReleased;
-        ReadingToolbar.PointerCaptureLost += (_, _) => toolbarDragPointer = null;
+        foreach (var header in new UIElement[] { ReadingToolbar, DraftsHeader, ContactsView.Header, SearchToolbar, ComposeToolbar, PreviewToolbar })
+            EnableWindowDrag(header);
+        EnableWindowDrag(ReadingPane);
+        SearchToolbar.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
         ((FrameworkElement)Content).ActualThemeChanged += (_, _) => UpdateThemeColors();
@@ -268,23 +268,40 @@ public sealed partial class MainWindow : Window
         try { decision.Load(); UpdateAgentModelLabel(); mail.Load(); if (mail.Account != null) { ShowAccount(mail.Account.Address); _ = LoadFoldersAsync(); } }
         catch (Exception ex) { ListStatus.Text = Strings.Get("Ui_a9e33d11fbc3") + ex.Message; }
     }
+    private void EnableWindowDrag(UIElement header)
+    {
+        header.PointerPressed += ReadingToolbar_PointerPressed;
+        header.PointerMoved += ReadingToolbar_PointerMoved;
+        header.PointerReleased += ReadingToolbar_PointerReleased;
+        header.PointerCaptureLost += (_, _) => toolbarDragPointer = null;
+    }
     private void ReadingToolbar_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (!e.GetCurrentPoint(ReadingToolbar).Properties.IsLeftButtonPressed) return;
-        for (DependencyObject? element = e.OriginalSource as DependencyObject; element != null && element != ReadingToolbar; element = VisualTreeHelper.GetParent(element))
-            if (element is Button) return;
-        if (!GetCursorPos(out toolbarDragStart) || !ReadingToolbar.CapturePointer(e.Pointer)) return;
+        var region = (UIElement)sender;
+        if (region == ReadingPane)
+        {
+            var y = e.GetCurrentPoint(ReadingPane).Position.Y;
+            bool emptyHeader = EmptyWorkspace.Visibility == Visibility.Visible && y < 72;
+            bool composePadding = ComposeWorkspace.Visibility == Visibility.Visible && y < ComposeWorkspace.Padding.Top;
+            if (!emptyHeader && !composePadding) return;
+        }
+        if (region == SettingsView.Child && e.GetCurrentPoint(region).Position.Y >= 24) return;
+        if (!e.GetCurrentPoint(region).Properties.IsLeftButtonPressed) return;
+        for (DependencyObject? element = e.OriginalSource as DependencyObject; element != null && element != region; element = VisualTreeHelper.GetParent(element))
+            if (element is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase or TextBox or PasswordBox or ComboBox) return;
+        if (!GetCursorPos(out toolbarDragStart) || !region.CapturePointer(e.Pointer)) return;
         toolbarWindowStart = AppWindow.Position;
         toolbarDragPointer = e.Pointer.PointerId;
         e.Handled = true;
     }
     private void ReadingToolbar_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
+        var region = (UIElement)sender;
         if (toolbarDragPointer != e.Pointer.PointerId || !GetCursorPos(out var point)) return;
-        if (!e.GetCurrentPoint(ReadingToolbar).Properties.IsLeftButtonPressed)
+        if (!e.GetCurrentPoint(region).Properties.IsLeftButtonPressed)
         {
             toolbarDragPointer = null;
-            ReadingToolbar.ReleasePointerCapture(e.Pointer);
+            region.ReleasePointerCapture(e.Pointer);
             return;
         }
         AppWindow.Move(new Windows.Graphics.PointInt32(toolbarWindowStart.X + point.X - toolbarDragStart.X, toolbarWindowStart.Y + point.Y - toolbarDragStart.Y));
@@ -294,7 +311,7 @@ public sealed partial class MainWindow : Window
     {
         if (toolbarDragPointer != e.Pointer.PointerId) return;
         toolbarDragPointer = null;
-        ReadingToolbar.ReleasePointerCapture(e.Pointer);
+        ((UIElement)sender).ReleasePointerCapture(e.Pointer);
         e.Handled = true;
     }
     private nint WindowMessage(nint hwnd, uint message, nuint wParam, nint lParam, nuint subclassId, nuint referenceData)
@@ -2524,11 +2541,21 @@ public sealed partial class MainWindow : Window
             return new ListViewItem { Content = content, MinHeight = 56, Padding = new Thickness(14, 10, 14, 10), HorizontalContentAlignment = HorizontalAlignment.Stretch };
         }
         var navigation = new ListView { SelectionMode = ListViewSelectionMode.Single, Margin = new Thickness(12, 20, 12, 12), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        foreach (var settingsPanel in new[] { generalPanel, panel, aiPanel })
+        {
+            var title = settingsPanel.Children[0];
+            settingsPanel.Children.RemoveAt(0);
+            var header = new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+            header.Children.Add(title);
+            settingsPanel.Children.Insert(0, header);
+            EnableWindowDrag(header);
+        }
         navigation.Items.Add(SettingsNavigationItem(Strings.Get("GeneralTitle"), "M 12,3 L 13.2,3 L 13.8,5.3 L 15.4,6 L 17.5,4.8 L 19.2,6.5 L 18,8.6 L 18.7,10.2 L 21,10.8 L 21,13.2 L 18.7,13.8 L 18,15.4 L 19.2,17.5 L 17.5,19.2 L 15.4,18 L 13.8,18.7 L 13.2,21 L 10.8,21 L 10.2,18.7 L 8.6,18 L 6.5,19.2 L 4.8,17.5 L 6,15.4 L 5.3,13.8 L 3,13.2 L 3,10.8 L 5.3,10.2 L 6,8.6 L 4.8,6.5 L 6.5,4.8 L 8.6,6 L 10.2,5.3 L 10.8,3 Z M 15,12 A 3,3 0 1 1 9,12 A 3,3 0 1 1 15,12"));
         navigation.Items.Add(SettingsNavigationItem(Strings.Get("Ui_1a866ebd4df9"), "M 3,6 L 21,6 L 21,18 L 3,18 Z M 3,7 L 12,13 L 21,7"));
         navigation.Items.Add(SettingsNavigationItem(Strings.Get("Ui_a9d73061c250"), "M 8,3 L 16,3 L 16,6 L 19,6 L 19,18 L 16,18 L 16,21 L 8,21 L 8,18 L 5,18 L 5,6 L 8,6 Z M 9,10 L 9,11 M 15,10 L 15,11 M 9,15 L 15,15 M 12,3 L 12,1"));
         navigation.SelectedIndex = 0;
-        var layout = new Grid();
+        var layout = new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+        EnableWindowDrag(layout);
         var navigationColumn = new ColumnDefinition { Width = new GridLength(MailColumn.ActualWidth > 0 ? MailColumn.ActualWidth : MailColumn.Width.Value) };
         layout.ColumnDefinitions.Add(navigationColumn);
         layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -2537,7 +2564,10 @@ public sealed partial class MainWindow : Window
             if (MailColumn.ActualWidth > 0 && Math.Abs(navigationColumn.Width.Value - MailColumn.ActualWidth) > 0.5)
                 navigationColumn.Width = new GridLength(MailColumn.ActualWidth);
         };
-        var navigationPane = new StackPanel { Children = { new TextBlock { Text = "设置", FontSize = 28, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(24, 24, 0, 0) }, navigation } };
+        var settingsHeader = new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+        settingsHeader.Children.Add(new TextBlock { Text = "设置", FontSize = 28, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(24, 24, 0, 0) });
+        EnableWindowDrag(settingsHeader);
+        var navigationPane = new StackPanel { Children = { settingsHeader, navigation } };
         layout.Children.Add(navigationPane);
         var scroll = new ScrollViewer { Content = generalPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var save = new Button { Content = Strings.Get("Ui_fadf24dbc5a9"), MinWidth = 96, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 40, 99, 207)), Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) };
