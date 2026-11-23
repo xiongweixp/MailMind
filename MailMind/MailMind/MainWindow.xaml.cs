@@ -214,6 +214,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Title = Strings.LanguageTag.StartsWith("zh", StringComparison.OrdinalIgnoreCase) ? "智邮" : "MailMind";
         McpBridge.StartHost(DispatcherQueue, ExecuteAgentToolAsync);
         UpdateDateRangeUi();
         ToBox.Search = query => ContactsView.SearchRecipients(query);
@@ -347,8 +348,7 @@ public sealed partial class MainWindow : Window
             var info = Marshal.PtrToStructure<MinMaxInfo>(lParam);
             double dpi = GetDpiForWindow(hwnd) / 96.0;
             // The reading pane takes the remaining width, so preserve it alongside the saved fixed columns.
-            double width = SidebarColumn.Width.Value + MailColumn.Width.Value + ReadingColumn.MinWidth + expandedAiWidth + 16;
-            info.MinTrackSize.X = Math.Max(info.MinTrackSize.X, (int)Math.Ceiling(width * dpi));
+            info.MinTrackSize.X = Math.Max(info.MinTrackSize.X, (int)Math.Ceiling(MinimumWindowWidth() * dpi));
             Marshal.StructureToPtr(info, lParam, false);
             return 0;
         }
@@ -1518,7 +1518,32 @@ public sealed partial class MainWindow : Window
         {
             var picker = new Windows.Storage.Pickers.FileOpenPicker(); picker.FileTypeFilter.Add("*");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
-            foreach (var file in await picker.PickMultipleFilesAsync())
+            await AddAgentFilesAsync(await picker.PickMultipleFilesAsync());
+        }
+        catch (Exception ex) { await ShowNotice("添加文件失败", ex.Message); }
+    }
+    private void AgentInput_DragOver(object sender, DragEventArgs e)
+    {
+        if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
+            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+        e.Handled = true;
+    }
+    private async void AgentInput_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems)) return;
+        var deferral = e.GetDeferral();
+        try
+        {
+            var items = await e.DataView.GetStorageItemsAsync();
+            await AddAgentFilesAsync(items.OfType<Windows.Storage.StorageFile>());
+        }
+        catch (Exception ex) { await ShowNotice("添加文件失败", ex.Message); }
+        finally { deferral.Complete(); }
+    }
+    private async Task AddAgentFilesAsync(System.Collections.Generic.IEnumerable<Windows.Storage.StorageFile> files)
+    {
+            foreach (var file in files)
             {
                 var properties = await file.GetBasicPropertiesAsync();
                 if (properties.Size > 20 * 1024 * 1024) throw new InvalidOperationException("单个文件不能超过 20 MB。");
@@ -1541,8 +1566,6 @@ public sealed partial class MainWindow : Window
                 remove.Click += (_, _) => { pendingAgentFiles.Remove(id); agentFiles.Remove(id); AgentAttachments.Children.Remove(capsule); };
                 row.Children.Add(remove); AgentAttachments.Children.Add(capsule);
             }
-        }
-        catch (Exception ex) { await ShowNotice("添加文件失败", ex.Message); }
     }
     private async Task<MailAttachment> ResolveAgentFileAsync(JsonElement args, System.Threading.CancellationToken token)
     {
@@ -1940,6 +1963,8 @@ public sealed partial class MainWindow : Window
                         }
                     });
                     """);
+                using (var script = new StreamReader(typeof(MainWindow).Assembly.GetManifestResourceStream("MailMind.ComposeAi.js")!))
+                    await BodyBox.CoreWebView2.ExecuteScriptAsync(await script.ReadToEndAsync());
                 composeReady = true;
                 await UpdateComposeThemeAsync();
             }
@@ -2052,7 +2077,8 @@ public sealed partial class MainWindow : Window
         replyDraft = null;
         composeAttachments.Clear();
         ToBox.Text = CcBox.Text = SubjectBox.Text = "";
-        if (composeReady) await BodyBox.CoreWebView2.ExecuteScriptAsync("document.body.innerHTML = ''; ");
+        composeAiCancellation?.Cancel();
+        if (composeReady) await BodyBox.CoreWebView2.ExecuteScriptAsync("window.mailmindAiReset(); document.body.innerHTML = ''; ");
         if (closeWorkspace) { MailList.SelectedItem = null; ComposeWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Visible; }
     }
     private async void FormatBold_Click(object sender, RoutedEventArgs e) => await EditorCommandAsync("bold");
@@ -2145,6 +2171,12 @@ public sealed partial class MainWindow : Window
         {
             using var message = JsonDocument.Parse(e.WebMessageAsJson);
             string type = message.RootElement.GetProperty("type").GetString() ?? "";
+            if (type == "composeAiCancel") { composeAiCancellation?.Cancel(); return; }
+            if (type == "composeAiGenerate")
+            {
+                await GenerateComposeAiAsync(message.RootElement.GetProperty("prompt").GetString() ?? "", message.RootElement.GetProperty("id").GetString() ?? "");
+                return;
+            }
             string name = message.RootElement.GetProperty("name").GetString() ?? Strings.Get("More_99f6fe6c41ad");
             if (type == "attachmentError") { await ShowNotice(Strings.Get("Ui_1072053d35d5"), string.Format(Strings.Get("Fmt_71963e091707"), name)); return; }
             if (type == "attachment") composeAttachments.Add(new MailAttachment(name, "application/octet-stream", Convert.FromBase64String(message.RootElement.GetProperty("data").GetString() ?? "")));
@@ -2155,7 +2187,43 @@ public sealed partial class MainWindow : Window
     {
         if (sender is Button { Tag: MailAttachment attachment }) composeAttachments.Remove(attachment);
     }
-    private async void ComposeAi_Click(object sender, RoutedEventArgs e) => await ShowNotice(Strings.Get("Ui_b8a7f8051bc9"), Strings.Get("Ui_8c72e6ffa111"));
+    private System.Threading.CancellationTokenSource? composeAiCancellation;
+    private async void ComposeAi_Click(object sender, RoutedEventArgs e)
+    {
+        if (!composeReady || sending) return;
+        string language = Strings.LanguageTag;
+        await BodyBox.CoreWebView2.ExecuteScriptAsync($"window.mailmindAiOpen({JsonSerializer.Serialize(language)});");
+    }
+    private async Task GenerateComposeAiAsync(string prompt, string id)
+    {
+        if (string.IsNullOrWhiteSpace(prompt)) return;
+        composeAiCancellation?.Cancel();
+        using var cancellation = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(windowLifetime.Token);
+        composeAiCancellation = cancellation;
+        try
+        {
+            var request = new[] { new AgentMessage("user", "根据下面的要求写一段可直接插入邮件正文的文字。只在 message 中返回正文，不要解释、不要调用工具；保持用户要求的语言。\n\n" + prompt) };
+            var result = await agent.RunAsync(decision.Settings, request, (name, args, token) => throw new InvalidOperationException("此功能不支持调用工具。"), cancellation.Token, (kind, value) =>
+            {
+                if (kind != "message" || cancellation.IsCancellationRequested || closing) return;
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!closing && !cancellation.IsCancellationRequested)
+                        _ = BodyBox.CoreWebView2.ExecuteScriptAsync($"window.mailmindAiProgress({JsonSerializer.Serialize(id)}, {JsonSerializer.Serialize(value)});");
+                });
+            });
+            cancellation.Token.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(result.Message)) throw new InvalidOperationException("AI 没有返回内容。");
+            await BodyBox.CoreWebView2.ExecuteScriptAsync($"window.mailmindAiResult({JsonSerializer.Serialize(id)}, {JsonSerializer.Serialize(result.Message)}, false);");
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            if (!closing && !cancellation.IsCancellationRequested)
+                await BodyBox.CoreWebView2.ExecuteScriptAsync($"window.mailmindAiResult({JsonSerializer.Serialize(id)}, {JsonSerializer.Serialize(ex.Message)}, true);");
+        }
+        finally { if (ReferenceEquals(composeAiCancellation, cancellation)) composeAiCancellation = null; }
+    }
     private async void Send_Click(object sender, RoutedEventArgs e)
     {
         if (sending) return;
@@ -2529,7 +2597,7 @@ public sealed partial class MainWindow : Window
             new TextBlock { Text = Strings.Get("GeneralTitle"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
             SettingsCard(CardTitle("界面"), FieldRow(Strings.Get("GeneralLanguage"), language)),
             SettingsCard(CardTitle("启动与托盘"), ToggleRow(Strings.Get("GeneralCloseToTray"), "关闭主窗口时保留程序在系统托盘中。", closeToTray), ToggleRow(Strings.Get("GeneralStartup"), "登录 Windows 时自动启动。", startup)),
-            new TextBlock { Text = Strings.Get("GeneralVersion") + "  v0.9.0_20261109" },
+            new TextBlock { Text = Strings.Get("GeneralVersion") + "  v0.9.0_20261123" },
             new TextBlock { Text = Strings.Get("GeneralLicense") + "  MIT License" } } };
         ListViewItem SettingsNavigationItem(string label, string path)
         {
@@ -2715,6 +2783,14 @@ public sealed partial class MainWindow : Window
         ReadingColumn.MinWidth = 448 + ReadingToolbar.Padding.Left + ReadingToolbar.Padding.Right;
         AiToggleButton.Visibility = aiVisible ? Visibility.Visible : Visibility.Collapsed;
         AiFloatingButton.Visibility = aiVisible ? Visibility.Collapsed : Visibility.Visible;
+        if (aiVisible)
+        {
+            double dpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this)) / 96.0;
+            int minimumWidth = (int)Math.Ceiling(MinimumWindowWidth() * dpi);
+            if (AppWindow.Size.Width < minimumWidth)
+                AppWindow.Resize(new Windows.Graphics.SizeInt32(minimumWidth, AppWindow.Size.Height));
+        }
     }
+    private double MinimumWindowWidth() => SidebarColumn.Width.Value + MailColumn.Width.Value + ReadingColumn.MinWidth + (aiVisible ? expandedAiWidth : 0) + 16;
 }
 

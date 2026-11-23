@@ -17,6 +17,7 @@
   <ItemGroup>
     <EmbeddedResource Include="..\..\docs\SOUL.md" LogicalName="MailMind.DefaultSoul.md" />
     <EmbeddedResource Include="..\..\docs\USER.md" LogicalName="MailMind.DefaultUser.md" />
+    <EmbeddedResource Include="ComposeAi.js" LogicalName="MailMind.ComposeAi.js" />
     <Content Include="Assets\MailMind.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\TrayNormal.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\TrayImportant.ico" CopyToOutputDirectory="PreserveNewest" />

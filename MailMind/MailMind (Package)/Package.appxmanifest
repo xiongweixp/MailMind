@@ -16,7 +16,7 @@
   <mp:PhoneIdentity PhoneProductId="fb40e889-d59a-447d-9384-1ec853a9f3ea" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>MailMind (Package)</DisplayName>
+    <DisplayName>ms-resource:AppDisplayName</DisplayName>
     <PublisherDisplayName>xiong</PublisherDisplayName>
     <Logo>Images\StoreLogo.png</Logo>
   </Properties>
@@ -35,7 +35,7 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="MailMind (Package)"
+        DisplayName="ms-resource:AppDisplayName"
         Description="MailMind (Package)"
         BackgroundColor="transparent"
         Square150x150Logo="Images\Square150x150Logo.png"
