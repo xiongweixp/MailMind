@@ -522,6 +522,7 @@ public sealed partial class MainWindow : Window
             FolderList.Children.Add(button); folderButtons[entry.Path] = button;
         }
         UpdateFolderSelection(folder);
+        UpdateEmptyWorkspaceStatus();
     }
     private static string FolderGlyph(string name) => name.ToLowerInvariant() switch
     {
@@ -610,6 +611,7 @@ public sealed partial class MainWindow : Window
                     if (before != null && ReferenceEquals(mail.Account, account))
                     {
                         var inbox = mail.CachedSearchItems(entry.Path);
+                        UpdateEmptyWorkspaceStatus();
                         if (before.Count > 0 || syncedInboxes.Contains(account.Address + "\n" + entry.Path))
                         {
                             var newItems = inbox.Where(i => i.Uid > previousMaxUid && !before.Contains(MailKey(i))).ToList();
@@ -722,6 +724,7 @@ public sealed partial class MainWindow : Window
     }
     private void RefreshCachedList()
     {
+        UpdateEmptyWorkspaceStatus();
         if (mail.Account == null) return;
         mail.BeginCachedFolder(folder);
         var cached = mail.CachedSearchItems(folder);
@@ -1407,6 +1410,14 @@ public sealed partial class MainWindow : Window
     {
         AgentModelLabel.Text = string.IsNullOrWhiteSpace(decision.Settings.ChatModel) ? Strings.Get("Ui_63595e95b708") : decision.Settings.ChatModel + Strings.Get("Ui_d7969271e099");
         AgentTitle.Text = string.IsNullOrWhiteSpace(decision.Settings.AssistantName) ? Strings.Get("Ui_5341ec296262") : decision.Settings.AssistantName;
+        UpdateEmptyWorkspaceStatus();
+    }
+    private void UpdateEmptyWorkspaceStatus()
+    {
+        var inbox = mail.CachedFolders().FirstOrDefault(f => f.Selectable && f.Name == "收件箱");
+        int count = inbox == null ? 0 : mail.CachedSearchItems(inbox.Path).Count;
+        string model = string.IsNullOrWhiteSpace(decision.Settings.ChatModel) ? Strings.Get("Ui_63595e95b708") : decision.Settings.ChatModel;
+        EmptyWorkspaceStatus.Text = $"收件箱 {count:N0} 封邮件 · {model}";
     }
     private void NewConversation_Click(object sender, RoutedEventArgs e)
     {
@@ -2815,6 +2826,11 @@ public sealed partial class MainWindow : Window
     {
         if (activeSplitter < 0 || e.Pointer.PointerId != dragPointerId) return;
         activeSplitter = -1; SaveColumnWidths();
+    }
+    private void OpenAiAssistant_Click(object sender, RoutedEventArgs e)
+    {
+        if (!aiVisible) ToggleAi_Click(sender, e);
+        DispatcherQueue.TryEnqueue(() => AgentInput.Focus(FocusState.Programmatic));
     }
     private void ToggleAi_Click(object sender, RoutedEventArgs e)
     {
