@@ -39,6 +39,13 @@ CREATE TABLE IF NOT EXISTS attachments (account TEXT NOT NULL, folder TEXT NOT N
         migration.CommandText = "INSERT OR IGNORE INTO attachment_flags SELECT s.account,s.folder,s.validity,s.uid,EXISTS(SELECT 1 FROM attachments a WHERE a.account=s.account AND a.folder=s.folder AND a.validity=s.validity AND a.uid=s.uid) FROM attachment_sets s"; migration.ExecuteNonQuery();
     }
     private SqliteConnection Open() { var db = new SqliteConnection(connectionString); db.Open(); return db; }
+    public void RemoveAccount(string account)
+    {
+        using var db = Open(); using var tx = db.BeginTransaction();
+        using var cmd = db.CreateCommand(); cmd.Transaction = tx;
+        cmd.CommandText = "DELETE FROM folders WHERE account=$a COLLATE NOCASE; DELETE FROM messages WHERE account=$a COLLATE NOCASE; DELETE FROM classifications WHERE account=$a COLLATE NOCASE; DELETE FROM attachments WHERE account=$a COLLATE NOCASE; DELETE FROM attachment_sets WHERE account=$a COLLATE NOCASE; DELETE FROM attachment_flags WHERE account=$a COLLATE NOCASE";
+        cmd.Parameters.AddWithValue("$a", account); cmd.ExecuteNonQuery(); tx.Commit();
+    }
     public string? Classification(MailItem item, string fingerprint) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="SELECT label FROM classifications WHERE account=$a AND folder=$f AND validity=$v AND uid=$u AND fingerprint=$fingerprint"; Key(c,item.Account,item.Folder,item.Validity,item.Uid); c.Parameters.AddWithValue("$fingerprint",fingerprint); return c.ExecuteScalar() as string; }
     public void PutClassification(MailItem item, string fingerprint, string label) { using var db=Open(); using var c=db.CreateCommand(); c.CommandText="INSERT OR REPLACE INTO classifications(account,folder,validity,uid,fingerprint,label) VALUES($a,$f,$v,$u,$fingerprint,$label)"; Key(c,item.Account,item.Folder,item.Validity,item.Uid); c.Parameters.AddWithValue("$fingerprint",fingerprint); c.Parameters.AddWithValue("$label",label); c.ExecuteNonQuery(); }
     public void SaveFolders(string account, IReadOnlyList<MailFolderInfo> folders)

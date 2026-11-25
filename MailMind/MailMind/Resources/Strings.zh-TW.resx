@@ -137,7 +137,7 @@
   <data name="Ui_656521c4ea6f" xml:space="preserve"><value>SMTP 連接埠</value></data>
   <data name="Ui_e63f130046f4" xml:space="preserve"><value>密碼或郵箱授權碼</value></data>
   <data name="Ui_c53b1b5a1719" xml:space="preserve"><value>請輸入授權碼</value></data>
-  <data name="Ui_1a866ebd4df9" xml:space="preserve"><value>收發伺服器</value></data>
+  <data name="Ui_1a866ebd4df9" xml:space="preserve"><value>帳號</value></data>
   <data name="Ui_9f7d652cf2ce" xml:space="preserve"><value>設定郵箱帳戶及伺服器。儲存時測試 IMAP 連線；傳送郵件時使用 SMTP 設定。</value></data>
   <data name="Ui_2d980c4eb4f6" xml:space="preserve"><value>接收郵件 · IMAP</value></data>
   <data name="Ui_07edb49543ea" xml:space="preserve"><value>傳送郵件 · SMTP</value></data>

@@ -186,6 +186,8 @@ public sealed partial class MainWindow : Window
     private readonly ObservableCollection<MailDateGroup> dateGroups = new();
     private readonly CollectionViewSource groupedMessages = new() { IsSourceGrouped = true };
     private bool aiVisible = true, loading;
+    private int loadingFolders;
+    private bool signingOut;
     private bool checkingForMail, folderInitialized;
     private int activeSyncs;
     private string? syncingFolderName;
@@ -533,6 +535,9 @@ public sealed partial class MainWindow : Window
     };
     private async Task LoadFoldersAsync()
     {
+        loadingFolders++;
+        try
+        {
         var cached = mail.CachedFolders();
         if (cached.Count > 0)
         {
@@ -555,6 +560,8 @@ public sealed partial class MainWindow : Window
         {
             if (!closing) ListStatus.Text = cached.Count > 0 ? Strings.Get("Ui_01cfb10ae247") + ex.Message : Strings.Get("Ui_77b89d0d2434") + ex.Message;
         }
+        }
+        finally { loadingFolders--; }
     }
     private void StartSyncAnimation()
     {
@@ -574,7 +581,7 @@ public sealed partial class MainWindow : Window
     }
     private async Task CheckForNewMailAsync()
     {
-        if (closing || checkingForMail || mail.Account == null) return;
+        if (closing || signingOut || checkingForMail || mail.Account == null) return;
         checkingForMail = true;
         mailSyncTimer.Stop();
         var account = mail.Account;
@@ -2314,8 +2321,12 @@ public sealed partial class MainWindow : Window
         imapSecurity.SelectionChanged += (_, _) => ssl.IsChecked = imapSecurity.SelectedIndex == 0;
         smtpSecurity.SelectionChanged += (_, _) => smtpSsl.IsChecked = smtpSecurity.SelectedIndex == 0;
         var accountTabs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        MailAccount? selectedSettingsAccount = null;
+        var signOut = new Button { Content = "退出账号", HorizontalAlignment = HorizontalAlignment.Right, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White), Background = new SolidColorBrush(Microsoft.UI.Colors.Firebrick), Visibility = Visibility.Collapsed };
         void FillAccount(MailAccount? account)
         {
+            selectedSettingsAccount = account;
+            signOut.Visibility = account == null ? Visibility.Collapsed : Visibility.Visible;
             displayName.Text = account?.DisplayName ?? ""; address.Text = account?.Address ?? ""; user.Text = account?.UserName ?? "";
             host.Text = account?.ImapHost ?? ""; smtpHost.Text = account?.SmtpHost ?? "";
             imapSecurity.SelectedIndex = account?.StartTls == true ? 1 : 0; smtpSecurity.SelectedIndex = account?.SmtpStartTls == true ? 1 : 0;
@@ -2349,12 +2360,45 @@ public sealed partial class MainWindow : Window
         MailAccount CurrentAccount() => new(address.Text.Trim(), string.IsNullOrWhiteSpace(user.Text) ? address.Text.Trim() : user.Text.Trim(), host.Text.Trim(), int.TryParse(port.Text, out var ip) ? ip : 0, imapSecurity.SelectedIndex == 1, smtpHost.Text.Trim(), int.TryParse(smtpPort.Text, out var sp) ? sp : 0, smtpSecurity.SelectedIndex == 1, displayName.Text.Trim());
         testImap.Click += async (_, _) => { testImap.IsEnabled = false; try { await mail.TestAsync(CurrentAccount(), secret.Password); error.Text = "收件连接成功"; } catch (Exception ex) { error.Text = ex.Message; } finally { testImap.IsEnabled = true; } };
         testSmtp.Click += async (_, _) => { testSmtp.IsEnabled = false; try { await mail.TestSmtpAsync(CurrentAccount(), secret.Password); error.Text = "发件连接成功"; } catch (Exception ex) { error.Text = ex.Message; } finally { testSmtp.IsEnabled = true; } };
-        var panel = new StackPanel { Spacing = 16, Children = {
+        var smtpCard = SettingsCard(ServerHeading("发件服务器  SMTP", testSmtp), FieldRow("服务器", smtpHost), FieldRow("端口", smtpPort), FieldRow("加密方式", smtpSecurity));
+        var accountActions = new Grid { RowSpacing = 16 };
+        accountActions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        accountActions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        accountActions.Children.Add(smtpCard);
+        Grid.SetRow(signOut, 1); accountActions.Children.Add(signOut);
+        var panel = new StackPanel { Spacing = 16, Margin = new Thickness(0, 0, 16, 0), Children = {
             new TextBlock { Text = Strings.Get("Ui_1a866ebd4df9"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
             new ScrollViewer { Content = accountTabs, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled },
             SettingsCard(CardTitle("账户信息"), FieldRow("显示名", displayName), FieldRow("邮箱地址", address), FieldRow("用户名", user), FieldRow("密码或授权码", secret)),
             SettingsCard(ServerHeading("收件服务器  IMAP", testImap), FieldRow("服务器", host), FieldRow("端口", port), FieldRow("加密方式", imapSecurity)),
-            SettingsCard(ServerHeading("发件服务器  SMTP", testSmtp), FieldRow("服务器", smtpHost), FieldRow("端口", smtpPort), FieldRow("加密方式", smtpSecurity)) } };
+            accountActions } };
+        signOut.Click += async (_, _) =>
+        {
+            var selected = selectedSettingsAccount;
+            if (selected == null) return;
+            var confirm = new ContentDialog { XamlRoot = SettingsView.XamlRoot, Title = "退出账号", Content = $"退出 {selected.Address}？本客户端保存的登录信息和缓存邮件将被删除，服务器上的邮件不会受影响。", PrimaryButtonText = "退出账号", CloseButtonText = "取消" };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+            signOut.IsEnabled = false;
+            signingOut = true;
+            mailSyncTimer.Stop();
+            try
+            {
+                while (checkingForMail || loading || classificationTasks.Count > 0 || loadingFolders > 0) await Task.Delay(100);
+                bool active = string.Equals(mail.Account?.Address, selected.Address, StringComparison.OrdinalIgnoreCase);
+                mail.RemoveAccount(selected.Address);
+                syncedInboxes.RemoveWhere(key => key.StartsWith(selected.Address + "\n", StringComparison.OrdinalIgnoreCase));
+                if (active)
+                {
+                    messages.Clear(); ShowFolders(Array.Empty<MailFolderInfo>()); AccountExpander.Visibility = Visibility.Collapsed; NoAccountHint.Visibility = Visibility.Visible;
+                    MailList.SelectedItem = null; systemPreview?.Close(); previewAttachment = null; PreviewImage.Source = null;
+                    ReadingToolbar.Visibility = ReadingWorkspace.Visibility = PreviewWorkspace.Visibility = Visibility.Collapsed; EmptyWorkspace.Visibility = Visibility.Visible;
+                    folderInitialized = false; ListStatus.Text = "";
+                }
+                RefreshAccountTabs(); FillAccount(null); error.Text = "账号已退出";
+            }
+            catch (Exception ex) { error.Text = "退出账号失败：" + ex.Message; }
+            finally { signingOut = false; signOut.IsEnabled = true; if (!closing) mailSyncTimer.Start(); }
+        };
         var ai = decision.Settings;
         var assistantName = new TextBox { Header = Strings.Get("AssistantName"), Text = ai.AssistantName ?? "", PlaceholderText = Strings.Get("Ui_5341ec296262") };
         var engine = new ComboBox { Header = "决策模型服务", HorizontalAlignment = HorizontalAlignment.Stretch, Items = { "LM Studio", "Lemonade Server", "自定义服务" }, SelectedIndex = ai.Engine switch { "Lemonade Server" => 1, "自定义服务" => 2, _ => 0 } };
@@ -2700,7 +2744,7 @@ public sealed partial class MainWindow : Window
                 if (string.IsNullOrWhiteSpace(address.Text) || string.IsNullOrWhiteSpace(host.Text) || string.IsNullOrWhiteSpace(secret.Password) || !int.TryParse(port.Text, out int number) || number < 1 || number > 65535) { error.Text = Strings.Get("Ui_793a10b4940d"); return; }
                 if (!int.TryParse(smtpPort.Text, out int smtpNumber) || smtpNumber < 1 || smtpNumber > 65535) { error.Text = Strings.Get("Ui_83d6267aa522"); return; }
                 var candidate = CurrentAccount();
-                error.Text = Strings.Get("Ui_0c2a21faf748"); await mail.TestAsync(candidate, secret.Password); mail.Save(candidate, secret.Password); RefreshAccountTabs(); folderInitialized = false; ShowAccount(candidate.Address); await LoadFoldersAsync(); error.Text = Strings.Get("GeneralSaved");
+                error.Text = Strings.Get("Ui_0c2a21faf748"); await mail.TestAsync(candidate, secret.Password); mail.Save(candidate, secret.Password); RefreshAccountTabs(); FillAccount(candidate); folderInitialized = false; ShowAccount(candidate.Address); await LoadFoldersAsync(); error.Text = Strings.Get("GeneralSaved");
             }
             catch (Exception ex) { if (!closing) error.Text = Strings.Get("Ui_a43d8b375652") + ex.Message; }
             finally { if (!closing) { save.IsEnabled = true; cancel.IsEnabled = true; } }

@@ -137,7 +137,7 @@
   <data name="Ui_656521c4ea6f" xml:space="preserve"><value>SMTP port</value></data>
   <data name="Ui_e63f130046f4" xml:space="preserve"><value>Password or app password</value></data>
   <data name="Ui_c53b1b5a1719" xml:space="preserve"><value>Enter app password</value></data>
-  <data name="Ui_1a866ebd4df9" xml:space="preserve"><value>Mail servers</value></data>
+  <data name="Ui_1a866ebd4df9" xml:space="preserve"><value>Accounts</value></data>
   <data name="Ui_9f7d652cf2ce" xml:space="preserve"><value>Configure the account and servers. Saving tests the IMAP connection; sending uses the SMTP settings.</value></data>
   <data name="Ui_2d980c4eb4f6" xml:space="preserve"><value>Incoming mail · IMAP</value></data>
   <data name="Ui_07edb49543ea" xml:space="preserve"><value>Outgoing mail · SMTP</value></data>

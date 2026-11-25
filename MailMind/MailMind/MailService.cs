@@ -203,6 +203,19 @@ public sealed class MailService
         File.WriteAllText(ConfigPath, JsonSerializer.Serialize(candidate));
         account = candidate; password = secret; ids.Clear(); folderName = null;
     }
+    public void RemoveAccount(string address)
+    {
+        cache.RemoveAccount(address);
+        try { vault.Remove(vault.Retrieve(VaultResource, address)); }
+        catch (System.Runtime.InteropServices.COMException ex) when ((uint)ex.HResult == 0x80070490) { }
+        accounts.RemoveAll(a => string.Equals(a.Address, address, StringComparison.OrdinalIgnoreCase));
+        File.WriteAllText(AccountsPath, JsonSerializer.Serialize(accounts));
+        if (string.Equals(account?.Address, address, StringComparison.OrdinalIgnoreCase))
+        {
+            if (File.Exists(ConfigPath)) File.Delete(ConfigPath);
+            account = null; password = null; ids.Clear(); folderName = null;
+        }
+    }
     public async Task SendAsync(string from, string to, string cc, string subject, string html, string text, System.Threading.CancellationToken token, ReplyDraft? reply = null, System.Collections.Generic.IReadOnlyList<MailAttachment>? attachments = null)
     {
         var selected = account ?? throw new InvalidOperationException(Strings.Get("More_5ae31f43f796"));
