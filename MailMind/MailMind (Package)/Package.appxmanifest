@@ -4,9 +4,10 @@
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   xmlns:systemai="http://schemas.microsoft.com/appx/manifest/systemai/windows10"
-  IgnorableNamespaces="uap rescap systemai">
+  IgnorableNamespaces="uap desktop rescap systemai">
 
   <Identity
     Name="fb40e889-d59a-447d-9384-1ec853a9f3ea"
@@ -44,6 +45,9 @@
         <uap:SplashScreen Image="Images\SplashScreen.png" />
       </uap:VisualElements>
       <Extensions>
+        <desktop:Extension Category="windows.startupTask" Executable="MailMind\MailMind.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="MailMindStartup" Enabled="false" DisplayName="MailMind" />
+        </desktop:Extension>
         <uap:Extension Category="windows.protocol">
           <uap:Protocol Name="mailto">
             <uap:DisplayName>MailMind</uap:DisplayName>

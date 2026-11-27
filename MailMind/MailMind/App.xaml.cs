@@ -49,9 +49,10 @@ namespace MailMind
         {
             var window = new MainWindow();
             _window = window;
-            _window.Activate();
             Program.ActivationPending = () => window.DispatcherQueue.TryEnqueue(ProcessPendingActivations);
-            HandleActivation(Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs());
+            var activation = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs();
+            if ((!IsStartupActivation(activation) && !Environment.GetCommandLineArgs().Contains("--startup-hidden")) || !window.HasTrayIcon)
+                HandleActivation(activation);
             ProcessPendingActivations();
         }
 
@@ -64,6 +65,7 @@ namespace MailMind
         private void HandleActivation(Microsoft.Windows.AppLifecycle.AppActivationArguments activation)
         {
             var window = (MainWindow)_window!;
+            if (IsStartupActivation(activation) && window.HasTrayIcon) return;
             window.AppWindow.Show();
             window.Activate();
             if (activation.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol &&
@@ -72,5 +74,9 @@ namespace MailMind
                 window.DispatcherQueue.TryEnqueue(async () => await window.OpenMailtoAsync(protocol.Uri));
             }
         }
+
+        private static bool IsStartupActivation(Microsoft.Windows.AppLifecycle.AppActivationArguments activation) =>
+            activation.Data is IStartupTaskActivatedEventArgs ||
+            (activation.Data is ILaunchActivatedEventArgs launch && launch.Arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("--startup-hidden"));
     }
 }

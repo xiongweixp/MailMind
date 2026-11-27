@@ -271,6 +271,7 @@ public sealed partial class MainWindow : Window
         try { decision.Load(); UpdateAgentModelLabel(); mail.Load(); if (mail.Account != null) { ShowAccount(mail.Account.Address); _ = LoadFoldersAsync(); } }
         catch (Exception ex) { ListStatus.Text = Strings.Get("Ui_a9e33d11fbc3") + ex.Message; }
     }
+    internal bool HasTrayIcon => trayIcon != null;
     private void EnableWindowDrag(UIElement header)
     {
         header.PointerPressed += ReadingToolbar_PointerPressed;
@@ -2628,7 +2629,9 @@ public sealed partial class MainWindow : Window
             new TextBlock { Text = "人设与档案会注入每次对话。", Opacity = 0.7 }, MarkdownCard("AI 人设 Soul.md", soul), MarkdownCard("用户档案 User.md", profile),
             SettingsCard(CardTitle(Strings.Get("McpConfiguration")), new TextBlock { Text = Strings.Get("McpDescription"), TextWrapping = TextWrapping.Wrap, Opacity = 0.7 }, mcpCode, mcpStatus) } };
         var language = new ComboBox { Header = Strings.Get("GeneralLanguage"), HorizontalAlignment = HorizontalAlignment.Stretch, Items = { Strings.Get("GeneralSystemLanguage"), "简体中文", "繁體中文", "English" }, SelectedIndex = generalSettings.Language switch { "zh-CN" => 1, "zh-TW" => 2, "en-US" => 3, _ => 0 } };
-        var startup = new ToggleSwitch { Header = Strings.Get("GeneralStartup"), OnContent = "", OffContent = "", IsOn = GeneralSettings.StartupEnabled() };
+        var startup = new ToggleSwitch { Header = Strings.Get("GeneralStartup"), OnContent = "", OffContent = "" };
+        try { startup.IsOn = await GeneralSettings.StartupEnabledAsync(); }
+        catch (Exception ex) { error.Text = ex.Message; startup.IsEnabled = false; }
         var closeToTray = new ToggleSwitch { Header = Strings.Get("GeneralCloseToTray"), OnContent = "", OffContent = "", IsOn = generalSettings.CloseToTray };
         foreach (var toggle in new[] { startup, closeToTray, decisionConsent, remoteConsent })
         {
@@ -2727,7 +2730,7 @@ public sealed partial class MainWindow : Window
                 if (navigation.SelectedIndex == 0)
                 {
                     var updated = new GeneralSettings(language.SelectedIndex switch { 1 => "zh-CN", 2 => "zh-TW", 3 => "en-US", _ => "system" }, closeToTray.IsOn);
-                    GeneralSettings.SetStartup(startup.IsOn);
+                    if (startup.IsEnabled) await GeneralSettings.SetStartupAsync(startup.IsOn);
                     updated.Save();
                     bool languageChanged = updated.Language != generalSettings.Language;
                     generalSettings = updated;
