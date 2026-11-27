@@ -69,6 +69,10 @@ Preview attachments directly in MailMind or save them to your device. Available 
 
 MailMind also supports IMAP browsing, SMTP sending, folders, contacts, date filtering, and a local SQLite cache. Cached content remains available when the connection fails; initial loading requires a connection.
 
+## System Tray and Notifications
+
+MailMind indicates unread mail in the system tray: important and normal messages make the new-mail icon blink, while ignorable messages show a steady new-mail icon. Newly received important messages also trigger a Windows notification. You can enable closing the window to the tray in settings, then reopen or exit the app from the tray menu.
+
 ## Getting Started
 
 - Windows 11 (build 22000) or later, as required by the packaging project's minimum target version.
@@ -83,7 +87,6 @@ Account configuration, AI settings, and the mail cache are stored under `%LOCALA
 
 - **Ollama support:** Add support for running local models with Ollama.
 - **Skill support:** Extend the AI assistant with skills so it can handle more tasks.
-- **System tray and notifications:** Show Windows notifications for important messages, change only the tray icon for normal messages, and leave ignorable messages silent.
 
 ## License
 
