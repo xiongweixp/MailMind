@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using Microsoft.UI.Xaml;
 
 namespace MailMind;
 
@@ -20,6 +21,7 @@ internal sealed class TrayIcon : IDisposable
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern bool Shell_NotifyIcon(uint message, ref NotifyData data);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern nint LoadImage(nint instance, string name, uint type, int width, int height, uint flags);
     [DllImport("user32.dll")] private static extern bool DestroyIcon(nint icon);
+    [DllImport("user32.dll")] private static extern nint CreateIcon(nint instance, int width, int height, byte planes, byte bitsPerPixel, byte[] andMask, byte[] xorMask);
     [DllImport("user32.dll")] private static extern nint CreatePopupMenu();
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool AppendMenu(nint menu, uint flags, nuint id, string text);
     [DllImport("user32.dll")] private static extern bool DestroyMenu(nint menu);
@@ -28,17 +30,37 @@ internal sealed class TrayIcon : IDisposable
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
     [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
     private NotifyData data;
+    private readonly DispatcherTimer blinkTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+    private enum IconState { Normal, Unread, Blank }
+    private IconState iconState;
     public TrayIcon(nint window)
     {
         data = new NotifyData { Size = (uint)Marshal.SizeOf<NotifyData>(), Window = window, Id = 1, Flags = 7, Callback = CallbackMessage, Icon = LoadImage(0, System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "TrayNormal.ico"), 1, 0, 0, 0x10), Tip = "MailMind", Info = "", InfoTitle = "" };
         if (data.Icon == 0 || !Shell_NotifyIcon(0, ref data)) { if (data.Icon != 0) DestroyIcon(data.Icon); throw new InvalidOperationException("Could not create the system tray icon."); }
+        blinkTimer.Tick += (_, _) => SetIcon(iconState == IconState.Unread ? IconState.Blank : IconState.Unread);
     }
-    public void SetUnread(bool unread)
+    public void SetUnread(bool unread, bool blink)
     {
-        var icon = LoadImage(0, System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", unread ? "TrayImportant.ico" : "TrayNormal.ico"), 1, 0, 0, 0x10);
+        if (unread && blink)
+        {
+            if (!blinkTimer.IsEnabled) { SetIcon(IconState.Unread); blinkTimer.Start(); }
+        }
+        else { blinkTimer.Stop(); SetIcon(unread ? IconState.Unread : IconState.Normal); }
+    }
+    private void SetIcon(IconState state)
+    {
+        if (iconState == state) return;
+        nint icon;
+        if (state == IconState.Blank)
+        {
+            var mask = new byte[32];
+            Array.Fill(mask, (byte)255);
+            icon = CreateIcon(0, 16, 16, 1, 1, mask, new byte[32]);
+        }
+        else icon = LoadImage(0, System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", state == IconState.Unread ? "TrayImportant.ico" : "TrayNormal.ico"), 1, 0, 0, 0x10);
         if (icon == 0) return;
         var old = data.Icon; data.Icon = icon; data.Flags = 2;
-        if (Shell_NotifyIcon(1, ref data)) DestroyIcon(old);
+        if (Shell_NotifyIcon(1, ref data)) { iconState = state; DestroyIcon(old); }
         else { data.Icon = old; DestroyIcon(icon); }
     }
     public void Notify(string title, string message)
@@ -59,5 +81,5 @@ internal sealed class TrayIcon : IDisposable
         }
         finally { DestroyMenu(menu); }
     }
-    public void Dispose() { Shell_NotifyIcon(2, ref data); if (data.Icon != 0) { DestroyIcon(data.Icon); data.Icon = 0; } }
+    public void Dispose() { blinkTimer.Stop(); Shell_NotifyIcon(2, ref data); if (data.Icon != 0) { DestroyIcon(data.Icon); data.Icon = 0; } }
 }

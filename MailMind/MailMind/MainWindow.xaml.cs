@@ -133,7 +133,7 @@ public sealed partial class MainWindow : Window
     private bool closeReady;
     private bool exitRequested;
     private TrayIcon? trayIcon;
-    private bool trayUnread, scanningInbox;
+    private bool trayUnread, trayBlink, scanningInbox;
     private readonly System.Collections.Generic.HashSet<string> pendingNotifications = new();
     private readonly System.Collections.Generic.HashSet<string> syncedInboxes = new();
     private static string MailKey(MailItem item) => $"{item.Account}\n{item.Folder}\n{item.Validity}\n{item.Uid}";
@@ -324,7 +324,7 @@ public sealed partial class MainWindow : Window
         if (message == TaskbarCreated && trayIcon != null)
         {
             trayIcon.Dispose(); trayIcon = null;
-            try { trayIcon = new TrayIcon(hwnd); trayIcon.SetUnread(trayUnread); }
+            try { trayIcon = new TrayIcon(hwnd); trayIcon.SetUnread(trayUnread, trayBlink); }
             catch (Exception) { AppWindow.Show(); Activate(); }
             return 0;
         }
@@ -365,7 +365,7 @@ public sealed partial class MainWindow : Window
         if (closing) return;
         if (generalSettings.CloseToTray && !exitRequested)
         {
-            try { trayIcon ??= new TrayIcon(WinRT.Interop.WindowNative.GetWindowHandle(this)); AppWindow.Hide(); return; }
+            try { trayIcon ??= new TrayIcon(WinRT.Interop.WindowNative.GetWindowHandle(this)); trayIcon.SetUnread(trayUnread, trayBlink); AppWindow.Hide(); return; }
             catch (Exception) { /* If the tray is unavailable, close normally. */ }
         }
         closing = true;
@@ -680,7 +680,9 @@ public sealed partial class MainWindow : Window
                         }
                         var current = mail.GetCachedAgentMessage(item);
                         if (current?.IsSeen != false || settings != decision.Settings) continue;
-                        if (result is "重要" or "一般") { trayUnread = true; trayIcon?.SetUnread(true); }
+                        trayUnread = true;
+                        trayBlink |= result is "重要" or "一般";
+                        trayIcon?.SetUnread(trayUnread, trayBlink);
                         if (pendingNotifications.Contains(MailKey(item)) && result == "重要")
                         {
                             trayIcon?.Notify(Strings.Get("TrayImportantMail"), item.Subject);
@@ -700,14 +702,16 @@ public sealed partial class MainWindow : Window
     }
     private async Task UpdateTrayStateAsync(string path, AiSettings settings)
     {
-        bool unread = false;
+        bool unread = false, blink = false;
         foreach (var item in mail.CachedSearchItems(path).Where(i => i.IsSeen == false))
         {
             var body = await mail.GetSearchBodyAsync(item, windowLifetime.Token);
             var label = mail.CachedClassification(item, DecisionService.Fingerprint(settings, item, body));
-            if (label is "重要" or "一般") { unread = true; break; }
+            if (label == null) continue;
+            unread = true;
+            if (label is "重要" or "一般") { blink = true; break; }
         }
-        trayUnread = unread; trayIcon?.SetUnread(unread);
+        trayUnread = unread; trayBlink = blink; trayIcon?.SetUnread(unread, blink);
     }
     private Task OpenFolderAsync(string name)
     {
