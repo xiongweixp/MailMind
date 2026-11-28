@@ -2662,7 +2662,7 @@ public sealed partial class MainWindow : Window
             new TextBlock { Text = Strings.Get("GeneralTitle"), FontSize = 20, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
             SettingsCard(CardTitle("界面"), FieldRow(Strings.Get("GeneralLanguage"), language)),
             SettingsCard(CardTitle("启动与托盘"), ToggleRow(Strings.Get("GeneralCloseToTray"), "关闭主窗口时保留程序在系统托盘中。", closeToTray), ToggleRow(Strings.Get("GeneralStartup"), "登录 Windows 时自动启动。", startup)),
-            new TextBlock { Text = Strings.Get("GeneralVersion") + "  v0.9.0_20261125" },
+            new TextBlock { Text = Strings.Get("GeneralVersion") + "  v0.9.0_20261128" },
             new TextBlock { Text = Strings.Get("GeneralLicense") + "  MIT License" } } };
         ListViewItem SettingsNavigationItem(string label, string path)
         {
