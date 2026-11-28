@@ -333,4 +333,5 @@
   <data name="McpCopied" xml:space="preserve"><value>設定已複製。</value></data>
   <data name="McpPathUnavailable" xml:space="preserve"><value>無法取得程式路徑。</value></data>
   <data name="McpDescription" xml:space="preserve"><value>將此設定貼到可信任的本機 MCP 用戶端。請保持 MailMind 執行；用戶端會啟動獨立的 stdio 行程。</value></data>
+  <data name="AddAccount" xml:space="preserve"><value>新增帳號</value></data>
 </root>

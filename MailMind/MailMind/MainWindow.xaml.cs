@@ -216,6 +216,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        NoAccountHint.Content = Strings.Get("AddAccount");
         Title = Strings.LanguageTag.StartsWith("zh", StringComparison.OrdinalIgnoreCase) ? "智邮" : "MailMind";
         McpBridge.StartHost(DispatcherQueue, ExecuteAgentToolAsync);
         UpdateDateRangeUi();
@@ -2282,7 +2283,9 @@ public sealed partial class MainWindow : Window
             await Task.Delay(TimeSpan.FromSeconds(5));
             if (!closing && statusVersion == sendStatusVersion) SendStatusBanner.Visibility = Visibility.Collapsed;
         }
-    }    private async void Settings_Click(object sender, RoutedEventArgs e)
+    }
+    private void AddAccount_Click(object sender, RoutedEventArgs e) => Settings_Click(NoAccountHint, e);
+    private async void Settings_Click(object sender, RoutedEventArgs e)
     {
         if (ComposeWorkspace.Visibility == Visibility.Visible) { await ShowNotice(Strings.Get("Ui_ef40431c5873"), Strings.Get("Ui_9b64d64a01dd")); return; }
         DraftsView.Visibility = Visibility.Collapsed; ContactsView.Visibility = Visibility.Collapsed; SettingsView.Visibility = Visibility.Visible; UpdateFolderSelection(folder);
@@ -2702,6 +2705,7 @@ public sealed partial class MainWindow : Window
         var scroll = new ScrollViewer { Content = generalPanel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         var save = new Button { Content = Strings.Get("Ui_fadf24dbc5a9"), MinWidth = 96, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 40, 99, 207)), Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) };
         navigation.SelectionChanged += (_, _) => { scroll.Content = navigation.SelectedIndex == 0 ? generalPanel : navigation.SelectedIndex == 1 ? panel : aiPanel; save.Content = navigation.SelectedIndex == 1 ? Strings.Get("Ui_847fc8062342") : Strings.Get("Ui_fadf24dbc5a9"); error.Text = ""; if (navigation.SelectedIndex == 2) { ScheduleDecisionRefresh(); ScheduleChatRefresh(); } };
+        if (ReferenceEquals(sender, NoAccountHint)) navigation.SelectedIndex = 1;
         var cancel = new Button { Content = Strings.Get("Ui_4d0b4688c787"), MinWidth = 96, MinHeight = 44, HorizontalContentAlignment = HorizontalAlignment.Center };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0), Children = { cancel, save } };
         var page = new Grid { RowSpacing = 8, Padding = new Thickness(24, 24, 24, 20) };

@@ -333,4 +333,5 @@
   <data name="McpCopied" xml:space="preserve"><value>配置已复制。</value></data>
   <data name="McpPathUnavailable" xml:space="preserve"><value>无法获取程序路径。</value></data>
   <data name="McpDescription" xml:space="preserve"><value>将此配置粘贴到可信的本机 MCP 客户端。请保持 MailMind 运行；客户端会启动独立的 stdio 进程。</value></data>
+  <data name="AddAccount" xml:space="preserve"><value>添加账号</value></data>
 </root>

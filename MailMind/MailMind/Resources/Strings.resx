@@ -333,4 +333,5 @@ The message may be permanently deleted if it is already in Trash or no Trash fol
   <data name="McpCopied" xml:space="preserve"><value>Configuration copied.</value></data>
   <data name="McpPathUnavailable" xml:space="preserve"><value>Unable to determine the executable path.</value></data>
   <data name="McpDescription" xml:space="preserve"><value>Paste this configuration into a trusted local MCP client. Keep MailMind running; the client starts a separate stdio process.</value></data>
+  <data name="AddAccount" xml:space="preserve"><value>Add account</value></data>
 </root>
